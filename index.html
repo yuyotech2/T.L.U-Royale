@@ -71,6 +71,14 @@
             pointer-events: none;
             display: flex;
             flex-direction: column;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        #main-menu {
+            pointer-events: auto;
+            background: radial-gradient(circle at center, rgba(34, 197, 94, 0.4) 0%, rgba(17, 24, 39, 0.9) 100%);
+            padding-bottom: 100px;
         }
 
         .overlay>* {
@@ -478,8 +486,7 @@
                 </div>
             </div>
 
-            <div
-                style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:30px;">
+            <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:30px; padding-top: 40px;">
                 <div class="side-nav">
                     <button class="nav-item active"><span class="nav-icon">⚔️</span><span
                             class="nav-text">BATTLE</span></button>
