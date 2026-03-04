@@ -56,9 +56,8 @@
             display: block;
             width: 100%;
             height: 100%;
-            background-color: #22c55e;
-            background-image: radial-gradient(#15803d 1.5px, transparent 1.5px);
-            background-size: 30px 30px;
+            background-color: #111827;
+            /* Dark BG to make everything pop */
         }
 
         .overlay {
@@ -877,8 +876,10 @@
             }
             update(dt) { if (this.stormRadius > 200) this.stormRadius -= dt * 10; }
             draw(ctx, cam, vp, isMinimap = false) {
+                ctx.save();
                 if (!isMinimap) {
-                    ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+                    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+                    ctx.lineWidth = 1;
                     for (let x = 0; x < this.w; x += 100) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, this.h); ctx.stroke(); }
                     for (let y = 0; y < this.h; y += 100) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(this.w, y); ctx.stroke(); }
                 }
@@ -965,6 +966,7 @@
                 ctx.arc(this.stormCenter.x, this.stormCenter.y, this.stormRadius, 0, Math.PI * 2);
                 ctx.rect(this.w, 0, -this.w, this.h);
                 ctx.fill();
+                ctx.restore();
             }
         }
 
@@ -1026,7 +1028,12 @@
                 this.resize(); window.onresize = () => this.resize();
                 this.keys = {}; this.mouse = { x: 0, y: 0, left: false };
                 window.onkeydown = (e) => {
-                    this.keys[e.key.toLowerCase()] = true;
+                    const k = e.key.toLowerCase();
+                    this.keys[k] = true;
+                    // Prevent browser actions for game keys
+                    const gameKeys = ['w', 'a', 's', 'd', 'e', 'q', 'tab', ' '];
+                    if (gameKeys.includes(k) || e.key === ' ') e.preventDefault();
+
                     if (this.state === 'playing') {
                         if (e.key >= '1' && e.key <= '5') this.player.selectedSlot = parseInt(e.key) - 1;
                         if (e.key.toLowerCase() === 'q') this.dropWeapon(this.player);
@@ -1105,11 +1112,19 @@
                 this.planeVel = { x: Math.cos(ang) * 600, y: Math.sin(ang) * 600 };
                 this.planeActive = true;
 
+                // Teleport all players to plane start immediately
+                this.entities.forEach(e => {
+                    e.x = this.planePos.x;
+                    e.y = this.planePos.y;
+                });
+
                 this.lastTime = performance.now();
                 requestAnimationFrame(t => this.loop(t));
                 document.getElementById('main-menu').style.display = 'none';
                 document.getElementById('plane-hud').style.display = 'block';
-                document.getElementById('plane-hud').innerText = `PRESS [${userData.keybinds.drop.toUpperCase()}] TO DROP`;
+                const dropKey = userData.keybinds.drop === ' ' ? 'SPACE' : userData.keybinds.drop.toUpperCase();
+                document.getElementById('plane-hud').innerText = `PRESS [${dropKey}] TO DROP`;
+                console.log("Game started! Mode:", mode, "MapSize:", curMapSize);
             }
             dropWeapon(ent) {
                 const wp = ent.inventory[ent.selectedSlot];
@@ -1349,7 +1364,7 @@
                     this.showSummary();
                 }
 
-                document.getElementById('minimap-large').style.display = this.keys[userData.keybinds.map] ? 'block' : 'none';
+                // Minimap toggle removed to fix crash
             }
             showSummary() {
                 this.state = 'summary';
@@ -1362,7 +1377,15 @@
                 document.getElementById('return-lobby').onclick = () => location.reload();
             }
             draw() {
-                const cam = { x: this.player.x - this.cvs.width / 2, y: this.player.y - this.cvs.height / 2 };
+                let targetX = this.player.x;
+                let targetY = this.player.y;
+
+                if (this.player.state === 'in_plane' && this.planeActive) {
+                    targetX = this.planePos.x;
+                    targetY = this.planePos.y;
+                }
+
+                const cam = { x: targetX - this.cvs.width / 2, y: targetY - this.cvs.height / 2 };
                 this.ctx.clearRect(0, 0, this.cvs.width, this.cvs.height);
                 this.ctx.save(); this.ctx.translate(-cam.x, -cam.y);
                 this.map.draw(this.ctx, cam, { w: this.cvs.width, h: this.cvs.height });
@@ -1472,10 +1495,18 @@
                     ctx.textAlign = 'right'; ctx.fillText("👑 KILL LEADER", this.cvs.width - 20, this.cvs.height - 50);
                 }
 
-                ctx.textAlign = 'center'; ctx.fillText(`NEXT ZONE: ${Math.floor(this.map.stormRadius)}m`, this.cvs.width / 2, 40);
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 20px Outfit';
+                ctx.fillText(`KILLS: ${this.player.kills} | HP: ${Math.round(this.player.hp)}`, this.cvs.width / 2, 80);
+
+                ctx.font = 'bold 16px Outfit';
+                ctx.fillStyle = 'rgba(255,255,255,0.7)';
+                ctx.fillText(`STORM: ${Math.floor(this.map.stormRadius)}m`, this.cvs.width / 2, 110);
             }
             loop(t) {
-                const dt = (t - this.lastTime) / 1000; this.lastTime = t;
+                let dt = Math.min((t - this.lastTime) / 1000, 0.1);
+                this.lastTime = t;
                 this.update(dt); this.draw();
                 if (this.running) requestAnimationFrame(t => this.loop(t));
             }
@@ -1577,6 +1608,7 @@
 
         document.querySelectorAll('.mode-btn').forEach(b => {
             b.onclick = () => {
+                alert("🚀 GAME STARTING!");
                 let mode = 'solo';
                 if (b.classList.contains('solo')) mode = 'solo';
                 else if (b.classList.contains('duo')) mode = 'duo';
