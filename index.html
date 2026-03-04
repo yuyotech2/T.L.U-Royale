@@ -389,7 +389,7 @@
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            display: flex;
+            display: none;
             gap: 8px;
             z-index: 100;
             pointer-events: auto;
@@ -649,8 +649,6 @@
                 <div class="rarity-indicator"></div>
             </div>
         </div>
-        <div id="minimap-container"><canvas id="minimap-canvas"></canvas></div>
-        <div id="minimap-large"><canvas id="minimap-large-canvas"></canvas></div>
 
         <canvas id="game-canvas"></canvas>
     </div>
@@ -1025,8 +1023,6 @@
         class GameEngine {
             constructor() {
                 this.cvs = document.getElementById('game-canvas'); this.ctx = this.cvs.getContext('2d');
-                this.mcvs = document.getElementById('minimap-canvas'); this.mctx = this.mcvs.getContext('2d');
-                this.lcvs = document.getElementById('minimap-large-canvas'); this.lctx = this.lcvs.getContext('2d');
                 this.resize(); window.onresize = () => this.resize();
                 this.keys = {}; this.mouse = { x: 0, y: 0, left: false };
                 window.onkeydown = (e) => {
@@ -1050,8 +1046,6 @@
             }
             resize() {
                 this.cvs.width = window.innerWidth; this.cvs.height = window.innerHeight;
-                this.mcvs.width = this.mcvs.height = 180;
-                this.lcvs.width = window.innerWidth * 0.8; this.lcvs.height = window.innerHeight * 0.8;
             }
             start(mode = 'solo') {
                 this.running = true; this.state = 'playing';
@@ -1114,7 +1108,6 @@
                 this.lastTime = performance.now();
                 requestAnimationFrame(t => this.loop(t));
                 document.getElementById('main-menu').style.display = 'none';
-                document.getElementById('minimap-container').style.display = 'block';
                 document.getElementById('plane-hud').style.display = 'block';
                 document.getElementById('plane-hud').innerText = `PRESS [${userData.keybinds.drop.toUpperCase()}] TO DROP`;
             }
@@ -1434,7 +1427,7 @@
 
                 this.bullets.forEach(b => { this.ctx.fillStyle = '#ff0'; this.ctx.beginPath(); this.ctx.arc(b.x, b.y, 4, 0, Math.PI * 2); this.ctx.fill(); });
                 this.ctx.restore();
-                this.drawHUD(); this.drawMinimaps();
+                this.drawHUD();
             }
             drawHUD() {
                 if (this.state !== 'playing' || this.player.state === 'in_plane') {
@@ -1480,24 +1473,6 @@
                 }
 
                 ctx.textAlign = 'center'; ctx.fillText(`NEXT ZONE: ${Math.floor(this.map.stormRadius)}m`, this.cvs.width / 2, 40);
-            }
-            drawMinimaps() {
-                const drawOn = (ctx, w, h) => {
-                    ctx.fillStyle = '#15803d'; ctx.fillRect(0, 0, w, h);
-                    const scale = w / this.map.w;
-                    this.map.draw(ctx, { x: 0, y: 0 }, { w: this.map.w, h: this.map.h }, true);
-                    if (this.planeActive) {
-                        ctx.strokeStyle = '#fff'; ctx.setLineDash([5, 5]); ctx.beginPath();
-                        const sX = (this.planePos.x - (this.planeVel.x * 10)) * scale, sY = (this.planePos.y - (this.planeVel.y * 10)) * scale;
-                        ctx.moveTo(sX, sY); ctx.lineTo(this.planeEnd.x * scale, this.planeEnd.y * scale); ctx.stroke(); ctx.setLineDash([]);
-                    }
-                    this.entities.forEach(e => {
-                        if (!e.alive || e.state === 'in_plane') return;
-                        ctx.fillStyle = e === this.player ? '#fff' : (e.team === 'player_team' ? '#4ade80' : '#ef4444');
-                        ctx.beginPath(); ctx.arc(e.x * scale, e.y * scale, 5 * (w / 180), 0, Math.PI * 2); ctx.fill();
-                    });
-                };
-                drawOn(this.mctx, 180, 180); drawOn(this.lctx, this.lcvs.width, this.lcvs.height);
             }
             loop(t) {
                 const dt = (t - this.lastTime) / 1000; this.lastTime = t;
