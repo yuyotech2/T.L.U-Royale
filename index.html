@@ -455,6 +455,86 @@
             cursor: not-allowed;
             pointer-events: none;
         }
+
+        /* Mobile Controls */
+        #mobile-controls {
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            pointer-events: none;
+            display: none;
+        }
+
+        #joystick-outer {
+            position: absolute;
+            bottom: 40px;
+            left: 40px;
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            pointer-events: auto;
+        }
+
+        #joystick-inner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 50px;
+            height: 50px;
+            background: var(--primary);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 15px var(--primary);
+        }
+
+        .mobile-btn {
+            position: absolute;
+            width: 70px;
+            height: 70px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            pointer-events: auto;
+            user-select: none;
+        }
+
+        .mobile-btn:active {
+            background: var(--primary);
+            transform: scale(0.9);
+        }
+
+        #btn-shoot {
+            bottom: 50px;
+            right: 50px;
+            width: 90px;
+            height: 90px;
+            background: rgba(239, 68, 68, 0.6);
+            border-color: rgba(239, 68, 68, 0.8);
+        }
+
+        #btn-jump {
+            bottom: 160px;
+            right: 60px;
+        }
+
+        #btn-interact {
+            bottom: 60px;
+            right: 160px;
+        }
+
+        #btn-switch {
+            bottom: 160px;
+            right: 160px;
+            font-size: 18px;
+            font-weight: 900;
+        }
     </style>
 </head>
 
@@ -647,6 +727,16 @@
                 <div class="slot-icon"></div>
                 <div class="rarity-indicator"></div>
             </div>
+        </div>
+
+        <div id="mobile-controls">
+            <div id="joystick-outer">
+                <div id="joystick-inner"></div>
+            </div>
+            <button class="mobile-btn" id="btn-shoot">🔥</button>
+            <button class="mobile-btn" id="btn-jump">🚀</button>
+            <button class="mobile-btn" id="btn-interact">👋</button>
+            <button class="mobile-btn" id="btn-switch">🔄</button>
         </div>
 
         <canvas id="game-canvas"></canvas>
@@ -1027,16 +1117,24 @@
                 this.cvs = document.getElementById('game-canvas'); this.ctx = this.cvs.getContext('2d');
                 this.resize(); window.onresize = () => this.resize();
                 this.keys = {}; this.mouse = { x: 0, y: 0, left: false };
+
+                // Mobile State
+                this.isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+                this.joystick = { active: false, x: 0, y: 0, dx: 0, dy: 0, id: null };
+
+                this.setupInputs();
+                this.running = false; this.state = 'lobby'; this.droppedItems = [];
+            }
+
+            setupInputs() {
                 window.onkeydown = (e) => {
                     const k = e.key.toLowerCase();
                     this.keys[k] = true;
-                    // Prevent browser actions for game keys
                     const gameKeys = ['w', 'a', 's', 'd', 'e', 'q', 'tab', ' '];
                     if (gameKeys.includes(k) || e.key === ' ') e.preventDefault();
-
                     if (this.state === 'playing') {
                         if (e.key >= '1' && e.key <= '5') this.player.selectedSlot = parseInt(e.key) - 1;
-                        if (e.key.toLowerCase() === 'q') this.dropWeapon(this.player);
+                        if (k === 'q') this.dropWeapon(this.player);
                     }
                 };
                 window.onkeyup = (e) => this.keys[e.key.toLowerCase()] = false;
@@ -1049,7 +1147,74 @@
                         else this.player.selectedSlot = (this.player.selectedSlot - 1 + 5) % 5;
                     }
                 };
-                this.running = false; this.state = 'lobby'; this.droppedItems = [];
+
+                // TOUCH CONTROLS
+                const joy = document.getElementById('joystick-outer');
+                const inner = document.getElementById('joystick-inner');
+
+                const handleTouch = (e) => {
+                    if (this.state !== 'playing') return;
+                    for (let i = 0; i < e.changedTouches.length; i++) {
+                        const t = e.changedTouches[i];
+                        const rect = joy.getBoundingClientRect();
+                        const centerX = rect.left + rect.width / 2;
+                        const centerY = rect.top + rect.height / 2;
+
+                        // Joystick Logic
+                        if (t.clientX > rect.left - 50 && t.clientX < rect.right + 50 && t.clientY > rect.top - 50 && t.clientY < rect.bottom + 50) {
+                            this.joystick.active = true;
+                            this.joystick.id = t.identifier;
+                            const dx = t.clientX - centerX;
+                            const dy = t.clientY - centerY;
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+                            const maxDist = rect.width / 2;
+                            const angle = Math.atan2(dy, dx);
+                            const finalDist = Math.min(dist, maxDist);
+
+                            this.joystick.dx = (Math.cos(angle) * finalDist) / maxDist;
+                            this.joystick.dy = (Math.sin(angle) * finalDist) / maxDist;
+
+                            inner.style.left = `calc(50% + ${this.joystick.dx * 30}px)`;
+                            inner.style.top = `calc(50% + ${this.joystick.dy * 30}px)`;
+                        }
+
+                        // Right side touch for rotation/aiming
+                        if (t.clientX > window.innerWidth / 2 && !t.target.classList.contains('mobile-btn')) {
+                            this.mouse.x = t.clientX;
+                            this.mouse.y = t.clientY;
+                        }
+                    }
+                };
+
+                window.addEventListener('touchstart', handleTouch);
+                window.addEventListener('touchmove', (e) => {
+                    handleTouch(e);
+                    e.preventDefault();
+                }, { passive: false });
+
+                window.addEventListener('touchend', (e) => {
+                    for (let i = 0; i < e.changedTouches.length; i++) {
+                        if (e.changedTouches[i].identifier === this.joystick.id) {
+                            this.joystick.active = false;
+                            this.joystick.dx = 0;
+                            this.joystick.dy = 0;
+                            inner.style.left = '50%';
+                            inner.style.top = '50%';
+                        }
+                    }
+                });
+
+                // MOBILE BUTTONS
+                document.getElementById('btn-shoot').ontouchstart = (e) => { this.mouse.left = true; e.preventDefault(); };
+                document.getElementById('btn-shoot').ontouchend = () => this.mouse.left = false;
+                document.getElementById('btn-jump').ontouchstart = (e) => { this.keys[' '] = true; e.preventDefault(); };
+                document.getElementById('btn-jump').ontouchend = () => this.keys[' '] = false;
+                document.getElementById('btn-interact').ontouchstart = (e) => { this.keys['e'] = true; e.preventDefault(); };
+                document.getElementById('btn-interact').ontouchend = () => this.keys['e'] = false;
+                document.getElementById('btn-switch').ontouchstart = (e) => {
+                    this.player.selectedSlot = (this.player.selectedSlot + 1) % 5;
+                    e.preventDefault();
+                };
             }
             resize() {
                 this.cvs.width = window.innerWidth; this.cvs.height = window.innerHeight;
@@ -1057,6 +1222,7 @@
             start(mode = 'solo') {
                 this.running = true; this.state = 'playing';
                 this.currentMode = mode;
+                if (this.isTouch) document.getElementById('mobile-controls').style.display = 'block';
 
                 let curMapSize = MAP_SIZE;
                 let totalTargetCount = 16;
@@ -1202,9 +1368,17 @@
                             let mx = 0, my = 0;
                             if (this.keys[kb.up]) my--; if (this.keys[kb.down]) my++;
                             if (this.keys[kb.left]) mx--; if (this.keys[kb.right]) mx++;
+
+                            // Joystick Override
+                            if (this.joystick.active) {
+                                mx = this.joystick.dx;
+                                my = this.joystick.dy;
+                            }
+
                             if (mx !== 0 || my !== 0) {
                                 const m = Math.sqrt(mx * mx + my * my);
-                                e.x += (mx / m) * 350 * dt; e.y += (my / m) * 350 * dt;
+                                const speedMult = this.joystick.active ? 1 : (1 / m);
+                                e.x += (mx * speedMult) * 350 * dt; e.y += (my * speedMult) * 350 * dt;
                                 if (Math.random() < 0.15) audio.walk();
                             }
 
@@ -1608,7 +1782,6 @@
 
         document.querySelectorAll('.mode-btn').forEach(b => {
             b.onclick = () => {
-                alert("🚀 GAME STARTING!");
                 let mode = 'solo';
                 if (b.classList.contains('solo')) mode = 'solo';
                 else if (b.classList.contains('duo')) mode = 'duo';
