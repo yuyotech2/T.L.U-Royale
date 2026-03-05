@@ -1123,8 +1123,9 @@
                 this.keys = {}; this.mouse = { x: 0, y: 0, left: false };
 
                 // Mobile State
-                this.isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
                 this.joystick = { active: false, x: 0, y: 0, dx: 0, dy: 0, id: null };
+                this.isAiming = false;
+                this.isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
                 this.setupInputs();
                 this.running = false; this.state = 'lobby'; this.droppedItems = [];
@@ -1191,9 +1192,11 @@
                         }
 
                         // Right side touch for rotation/aiming
-                        if (t.clientX > window.innerWidth / 2 && !t.target.classList.contains('mobile-btn')) {
+                        if (t.clientX > window.innerWidth * 0.4 && !t.target.classList.contains('mobile-btn')) {
                             this.mouse.x = t.clientX;
                             this.mouse.y = t.clientY;
+                            this.isAiming = true;
+                            this.isAimingId = t.identifier;
                         }
                     }
                 };
@@ -1213,8 +1216,25 @@
                             inner.style.left = '50%';
                             inner.style.top = '50%';
                         }
+                        if (e.changedTouches[i].identifier === this.isAimingId) {
+                            this.isAiming = false;
+                        }
                     }
                 });
+
+                // Hotbar Tapping for Mobile
+                for (let i = 0; i < 5; i++) {
+                    const slot = document.getElementById(`slot-${i}`);
+                    if (slot) {
+                        const select = (e) => {
+                            this.player.selectedSlot = i;
+                            e.preventDefault();
+                            e.stopPropagation();
+                        };
+                        slot.onclick = select;
+                        slot.ontouchstart = select;
+                    }
+                }
 
                 // MOBILE BUTTONS
                 document.getElementById('btn-shoot').ontouchstart = (e) => { this.mouse.left = true; e.preventDefault(); };
@@ -1361,10 +1381,24 @@
                         // Glider Steering (Player only or bots too)
                         if (e === this.player) {
                             const kb = userData.keybinds;
-                            if (this.keys[kb.up]) e.y -= 150 * dt;
-                            if (this.keys[kb.down]) e.y += 150 * dt;
-                            if (this.keys[kb.left]) e.x -= 150 * dt;
-                            if (this.keys[kb.right]) e.x += 150 * dt;
+                            let mx = 0, my = 0;
+                            if (this.keys[kb.up]) my -= 1;
+                            if (this.keys[kb.down]) my += 1;
+                            if (this.keys[kb.left]) mx -= 1;
+                            if (this.keys[kb.right]) mx += 1;
+
+                            if (this.joystick.active) {
+                                mx = this.joystick.dx;
+                                my = this.joystick.dy;
+                            }
+
+                            if (mx !== 0 || my !== 0) {
+                                const m = Math.sqrt(mx * mx + my * my);
+                                const speedMult = this.joystick.active ? 1 : (1 / m);
+                                e.x += (mx * speedMult) * 180 * dt;
+                                e.y += (my * speedMult) * 180 * dt;
+                                e.angle = Math.atan2(my, mx);
+                            }
                         } else {
                             // Bots move towards random spot while dropping
                             const ang = Math.atan2(e.dropTarget.y - e.y, e.dropTarget.x - e.x);
@@ -1425,7 +1459,11 @@
                             // Removed building collision for movement to allow access to crates inside buildings
                             // Buildings now act as floor markers/loot zones.
 
-                            e.angle = Math.atan2(this.mouse.y - this.cvs.height / 2, this.mouse.x - this.cvs.width / 2);
+                            if (this.joystick.active && !this.isAiming) {
+                                e.angle = Math.atan2(this.joystick.dy, this.joystick.dx);
+                            } else {
+                                e.angle = Math.atan2(this.mouse.y - this.cvs.height / 2, this.mouse.x - this.cvs.width / 2);
+                            }
                             if (this.mouse.left && e.inventory[e.selectedSlot] && e.cd <= 0) {
                                 e.shoot(this);
                                 e.cd = WEAPONS[e.inventory[e.selectedSlot].type].cd;
