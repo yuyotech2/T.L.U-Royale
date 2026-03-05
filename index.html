@@ -1153,6 +1153,14 @@
                 const inner = document.getElementById('joystick-inner');
 
                 const handleTouch = (e) => {
+                    if (!this.isTouch) {
+                        this.isTouch = true;
+                        document.getElementById('mobile-controls').style.display = 'block';
+                        const dropKey = userData.keybinds.drop === ' ' ? 'SPACE' : userData.keybinds.drop.toUpperCase();
+                        if (this.player.state === 'in_plane') {
+                            document.getElementById('plane-hud').innerText = `TAP TO DROP`;
+                        }
+                    }
                     if (this.state !== 'playing') return;
                     for (let i = 0; i < e.changedTouches.length; i++) {
                         const t = e.changedTouches[i];
@@ -1289,7 +1297,7 @@
                 document.getElementById('main-menu').style.display = 'none';
                 document.getElementById('plane-hud').style.display = 'block';
                 const dropKey = userData.keybinds.drop === ' ' ? 'SPACE' : userData.keybinds.drop.toUpperCase();
-                document.getElementById('plane-hud').innerText = `PRESS [${dropKey}] TO DROP`;
+                document.getElementById('plane-hud').innerText = this.isTouch ? `TAP TO DROP` : `PRESS [${dropKey}] TO DROP`;
                 console.log("Game started! Mode:", mode, "MapSize:", curMapSize);
             }
             dropWeapon(ent) {
