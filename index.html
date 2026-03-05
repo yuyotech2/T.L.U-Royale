@@ -1223,16 +1223,19 @@
                 });
 
                 // Hotbar Tapping for Mobile
+                const updateSelectedSlot = (e, index) => {
+                    if (this.player) {
+                        this.player.selectedSlot = index;
+                        console.log("Mobile: Switched to slot", index);
+                        e.preventDefault();
+                    }
+                };
+
                 for (let i = 0; i < 5; i++) {
                     const slot = document.getElementById(`slot-${i}`);
                     if (slot) {
-                        const select = (e) => {
-                            this.player.selectedSlot = i;
-                            e.preventDefault();
-                            e.stopPropagation();
-                        };
-                        slot.onclick = select;
-                        slot.ontouchstart = select;
+                        slot.addEventListener('touchstart', (e) => updateSelectedSlot(e, i), { passive: false });
+                        slot.addEventListener('mousedown', (e) => updateSelectedSlot(e, i));
                     }
                 }
 
@@ -1395,8 +1398,8 @@
                             if (mx !== 0 || my !== 0) {
                                 const m = Math.sqrt(mx * mx + my * my);
                                 const speedMult = this.joystick.active ? 1 : (1 / m);
-                                e.x += (mx * speedMult) * 180 * dt;
-                                e.y += (my * speedMult) * 180 * dt;
+                                e.x += (mx * speedMult) * 200 * dt; // Increased glide speed
+                                e.y += (my * speedMult) * 200 * dt;
                                 e.angle = Math.atan2(my, mx);
                             }
                         } else {
@@ -1404,6 +1407,7 @@
                             const ang = Math.atan2(e.dropTarget.y - e.y, e.dropTarget.x - e.x);
                             e.x += Math.cos(ang) * 200 * dt;
                             e.y += Math.sin(ang) * 200 * dt;
+                            e.angle = ang;
                         }
 
                         e.dropScale -= dt * 0.8;
