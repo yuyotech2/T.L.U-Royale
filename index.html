@@ -237,6 +237,13 @@
             border-radius: 10px;
             overflow: hidden;
             display: none;
+            /* Shown by JS when playing */
+            z-index: 40;
+        }
+
+        #minimap-canvas {
+            width: 100%;
+            height: 100%;
         }
 
         #minimap-large {
@@ -709,6 +716,9 @@
         </div>
 
         <!-- In-Game HUD -->
+        <div id="minimap-container">
+            <canvas id="minimap-canvas" width="200" height="200"></canvas>
+        </div>
         <div id="kill-feed"></div>
         <div id="hotbar">
             <div class="inv-slot active" id="slot-0"><span class="slot-key">1</span>
@@ -1148,6 +1158,7 @@
         class GameEngine {
             constructor() {
                 this.cvs = document.getElementById('game-canvas'); this.ctx = this.cvs.getContext('2d');
+                this.mcvs = document.getElementById('minimap-canvas'); this.mctx = this.mcvs.getContext('2d');
                 this.resize(); window.onresize = () => this.resize();
                 this.keys = {}; this.mouse = { x: 0, y: 0, left: false };
 
@@ -1825,6 +1836,31 @@
                 ctx.font = 'bold 16px Outfit';
                 ctx.fillStyle = 'rgba(255,255,255,0.7)';
                 ctx.fillText(`STORM: ${Math.floor(this.map.stormRadius)}m`, this.cvs.width / 2, 110);
+
+                // --- MINIMAP RENDERING ---
+                const mm = document.getElementById('minimap-container');
+                mm.style.display = 'block';
+                const mctx = this.mctx;
+                const mcvs = this.mcvs;
+                mctx.clearRect(0, 0, mcvs.width, mcvs.height);
+
+                // Map Scale
+                const scale = mcvs.width / this.map.w;
+
+                // Draw Map on Minimap
+                mctx.save();
+                mctx.scale(scale, scale);
+                this.map.draw(mctx, null, null, true);
+
+                // Draw Entities as dots
+                this.entities.forEach(ent => {
+                    if (!ent.alive || ent.state !== 'playing' || ent.hidden) return;
+                    mctx.fillStyle = ent === this.player ? '#4ade80' : '#ef4444';
+                    mctx.beginPath();
+                    mctx.arc(ent.x, ent.y, 40, 0, Math.PI * 2); // Larger dots for visibility
+                    mctx.fill();
+                });
+                mctx.restore();
             }
             loop(t) {
                 let dt = Math.min((t - this.lastTime) / 1000, 0.1);
