@@ -947,12 +947,14 @@
 
                 // Obstacles
                 for (let i = 0; i < treeCount; i++) this.obstacles.push({ x: Math.random() * w, y: Math.random() * h, type: Math.random() > 0.3 ? 'tree' : 'bush', r: 35 + Math.random() * 30 });
-                // Buildings
+                // Buildings (Platforms)
                 for (let i = 0; i < buildCount; i++) {
+                    const type = Math.random() > 0.4 ? 'stone' : 'wood';
                     this.buildings.push({
                         x: Math.random() * (w - 600) + 300, y: Math.random() * (h - 600) + 300,
                         w: 250 + Math.random() * 300, h: 250 + Math.random() * 300,
-                        color: '#4b5563'
+                        color: type === 'stone' ? '#4b5563' : '#78350f',
+                        type: type
                     });
                 }
                 // Crates
@@ -978,11 +980,34 @@
                     for (let y = 0; y < this.h; y += 100) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(this.w, y); ctx.stroke(); }
                 }
 
-                // Buildings
+                // Buildings (Platforms)
                 this.buildings.forEach(b => {
                     ctx.fillStyle = b.color;
                     ctx.fillRect(b.x, b.y, b.w, b.h);
-                    ctx.strokeStyle = '#1f2937'; ctx.lineWidth = isMinimap ? 1 : 4;
+
+                    if (!isMinimap && b.type === 'wood') {
+                        // Plank details for wooden platforms
+                        ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+                        ctx.lineWidth = 1;
+                        for (let lx = 20; lx < b.w; lx += 40) {
+                            ctx.beginPath();
+                            ctx.moveTo(b.x + lx, b.y);
+                            ctx.lineTo(b.x + lx, b.y + b.h);
+                            ctx.stroke();
+                        }
+                    } else if (!isMinimap && b.type === 'stone') {
+                        // Stone tile details
+                        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+                        ctx.lineWidth = 1;
+                        for (let lx = 40; lx < b.w; lx += 80) {
+                            for (let ly = 40; ly < b.h; ly += 80) {
+                                ctx.strokeRect(b.x + lx - 40, b.y + ly - 40, 80, 80);
+                            }
+                        }
+                    }
+
+                    ctx.strokeStyle = b.type === 'wood' ? '#451a03' : '#1f2937';
+                    ctx.lineWidth = isMinimap ? 1 : 4;
                     ctx.strokeRect(b.x, b.y, b.w, b.h);
                 });
 
