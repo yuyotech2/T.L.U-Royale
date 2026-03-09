@@ -554,7 +554,7 @@
                 </div>
                 <div class="logo-container">
                     <h1 class="game-logo">T.L.U ROYALE</h1>
-                    <span class="game-version">V.2.0.1 (MOBILE UPDATED)</span>
+                    <span class="game-version">V.2.0.2 (COMBAT POLISH)</span>
                 </div>
                 <div class="utility-btns" style="display:flex; gap:10px;">
                     <a href="https://www.youtube.com/channel/UCErso5LLwaSSWml8K-IAE4w" target="_blank"
@@ -1131,6 +1131,17 @@
                 this.running = false; this.state = 'lobby'; this.droppedItems = [];
             }
 
+            normalizeAngle(a) {
+                while (a < -Math.PI) a += Math.PI * 2;
+                while (a > Math.PI) a -= Math.PI * 2;
+                return a;
+            }
+
+            lerpAngle(a, b, t) {
+                const diff = this.normalizeAngle(b - a);
+                return a + diff * t;
+            }
+
             setupInputs() {
                 window.onkeydown = (e) => {
                     const k = e.key.toLowerCase();
@@ -1463,11 +1474,43 @@
                             // Removed building collision for movement to allow access to crates inside buildings
                             // Buildings now act as floor markers/loot zones.
 
+                            // Angle & Aiming Logic
                             if (this.joystick.active && !this.isAiming) {
                                 e.angle = Math.atan2(this.joystick.dy, this.joystick.dx);
                             } else {
                                 e.angle = Math.atan2(this.mouse.y - this.cvs.height / 2, this.mouse.x - this.cvs.width / 2);
                             }
+
+                            // Mobile Enhancements: Aim Assist & Auto-Fire
+                            if (this.isTouch) {
+                                let aimTarget = null, aimDist = 600;
+                                this.entities.forEach(other => {
+                                    if (other !== e && other.alive && other.team !== e.team && other.state === 'playing') {
+                                        const d = Math.sqrt((other.x - e.x) ** 2 + (other.y - e.y) ** 2);
+                                        if (d < aimDist) {
+                                            const angTo = Math.atan2(other.y - e.y, other.x - e.x);
+                                            const diff = Math.abs(this.normalizeAngle(angTo - e.angle));
+                                            if (diff < 0.6) { // ~35 degree cone
+                                                aimDist = d; aimTarget = other;
+                                            }
+                                        }
+                                    }
+                                });
+
+                                if (aimTarget) {
+                                    const angTo = Math.atan2(aimTarget.y - e.y, aimTarget.x - e.x);
+                                    // Soft lock: pull angle towards target
+                                    e.angle = this.lerpAngle(e.angle, angTo, 0.2);
+
+                                    // Auto-Fire: If nearly perfectly aimed, shoot!
+                                    const fireDiff = Math.abs(this.normalizeAngle(angTo - e.angle));
+                                    if (fireDiff < 0.15 && e.inventory[e.selectedSlot] && e.cd <= 0) {
+                                        e.shoot(this);
+                                        e.cd = WEAPONS[e.inventory[e.selectedSlot].type].cd;
+                                    }
+                                }
+                            }
+
                             if (this.mouse.left && e.inventory[e.selectedSlot] && e.cd <= 0) {
                                 e.shoot(this);
                                 e.cd = WEAPONS[e.inventory[e.selectedSlot].type].cd;
