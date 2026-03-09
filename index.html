@@ -425,32 +425,6 @@
 
         .slot-icon {
             font-size: 24px;
-            width: 45px;
-            height: 35px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .weapon-sprite {
-            width: 100%;
-            height: 100%;
-            background-image: url('assets/weapons.png');
-            background-size: 300% 100%;
-            background-repeat: no-repeat;
-            image-rendering: auto;
-        }
-
-        .wp-smg {
-            background-position: 0% 0%;
-        }
-
-        .wp-shotgun {
-            background-position: 50% 0%;
-        }
-
-        .wp-ak {
-            background-position: 100% 0%;
         }
 
         .rarity-indicator {
@@ -1764,11 +1738,11 @@
                     const icon = slot.querySelector('.slot-icon');
                     const indicator = slot.querySelector('.rarity-indicator');
                     if (wp) {
-                        // Premium Icons mapping from user provided sprite sheet
+                        // Premium Icons mapping
                         const iconMap = {
-                            'ak-47': '<div class="weapon-sprite wp-ak"></div>',
-                            'smg': '<div class="weapon-sprite wp-smg"></div>',
-                            'pump shotgun': '<div class="weapon-sprite wp-shotgun"></div>'
+                            'ak-47': '<span style="color:#ef4444">⚔️</span>',
+                            'smg': '<span style="color:#f59e0b">⚡</span>',
+                            'pump shotgun': '<span style="color:#3b82f6">💥</span>'
                         };
                         icon.innerHTML = iconMap[wp.type] || '';
                         indicator.style.background = RARITIES[wp.rarity].color;
