@@ -948,12 +948,13 @@
                 // Obstacles
                 for (let i = 0; i < treeCount; i++) this.obstacles.push({ x: Math.random() * w, y: Math.random() * h, type: Math.random() > 0.3 ? 'tree' : 'bush', r: 35 + Math.random() * 30 });
                 // Buildings (Platforms)
-                for (let i = 0; i < buildCount; i++) {
-                    const type = Math.random() > 0.4 ? 'stone' : 'wood';
+                const totalBuildings = Math.floor(buildCount * 1.2); // Slightly more buildings
+                for (let i = 0; i < totalBuildings; i++) {
+                    const type = Math.random() > 0.5 ? 'stone' : 'wood';
                     this.buildings.push({
                         x: Math.random() * (w - 600) + 300, y: Math.random() * (h - 600) + 300,
                         w: 250 + Math.random() * 300, h: 250 + Math.random() * 300,
-                        color: type === 'stone' ? '#4b5563' : '#78350f',
+                        color: type === 'stone' ? '#4b5563' : '#92400e', // Vibrancy up for wood
                         type: type
                     });
                 }
@@ -1103,10 +1104,13 @@
                 this.dropTarget = { x: 0, y: 0 };
                 this.dropScale = 5;
                 this.aggro = Math.random() < 0.5;
+                this.hidden = false;
+                this.revealTime = 0;
             }
             shoot(engine) {
                 const wp = this.inventory[this.selectedSlot];
                 if (!wp) return;
+                this.revealTime = 1.5; // Reveal for 1.5s when shooting
                 const w = WEAPONS[wp.type];
                 for (let i = 0; i < w.count; i++) {
                     const spread = (Math.random() - 0.5) * (w.count > 1 ? 0.4 : 0.1);
@@ -1414,6 +1418,19 @@
 
                 this.entities.forEach(e => {
                     if (!e.alive) return;
+
+                    // Bush Hiding Logic
+                    if (e.revealTime > 0) e.revealTime -= dt;
+                    e.hidden = false;
+                    if (e.revealTime <= 0 && e.state === 'playing') {
+                        this.map.obstacles.forEach(o => {
+                            if (o.type === 'bush') {
+                                const d = Math.sqrt((o.x - e.x) ** 2 + (o.y - e.y) ** 2);
+                                if (d < o.r - 2) e.hidden = true;
+                            }
+                        });
+                    }
+
                     if (e.state === 'in_plane' && this.planeActive) {
                         e.x = this.planePos.x; e.y = this.planePos.y;
                     } else if (e.state === 'dropping') {
@@ -1511,6 +1528,7 @@
                                 let aimTarget = null, aimDist = 600;
                                 this.entities.forEach(other => {
                                     if (other !== e && other.alive && other.team !== e.team && other.state === 'playing') {
+                                        if (other.hidden) return; // Cannot aim assist at hidden targets
                                         const d = Math.sqrt((other.x - e.x) ** 2 + (other.y - e.y) ** 2);
                                         if (d < aimDist) {
                                             const angTo = Math.atan2(other.y - e.y, other.x - e.x);
@@ -1547,6 +1565,7 @@
                             let targetEntity = null, targetDist = 1500; // Larger search range
                             this.entities.forEach(other => {
                                 if (other !== e && other.alive && other.team !== e.team && (other.state === 'playing' || other.state === 'dropping')) {
+                                    if (other.hidden) return; // Bots can't see hidden targets
                                     const d = Math.sqrt((other.x - e.x) ** 2 + (other.y - e.y) ** 2);
                                     if (d < targetDist) { targetDist = d; targetEntity = other; }
                                 }
@@ -1715,6 +1734,12 @@
                     }
 
                     this.ctx.rotate(e.angle);
+
+                    // Transparency if hidden
+                    if (e.hidden) {
+                        this.ctx.globalAlpha = (e === this.player) ? 0.4 : 0.0;
+                    }
+
                     this.ctx.fillStyle = e.color || (e.isBot ? '#ef4444' : '#3b82f6');
                     this.ctx.beginPath(); this.ctx.arc(0, 0, e.r, 0, Math.PI * 2); this.ctx.fill();
                     this.ctx.strokeStyle = '#000'; this.ctx.lineWidth = 1 / e.dropScale; this.ctx.stroke();
@@ -1729,6 +1754,7 @@
                         }
                     }
                     this.ctx.restore();
+                    this.ctx.globalAlpha = 1.0;
                 });
 
                 this.droppedItems.forEach(item => {
