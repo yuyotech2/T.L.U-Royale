@@ -659,6 +659,32 @@
                                 FRIEND</button>
                         </div>
                     </div>
+                    <div class="news-panel"
+                        style="position:absolute; right:40px; top:120px; width:280px; background:var(--panel-bg); border:2px solid var(--panel-border); border-radius:15px; padding:20px; text-align:left; pointer-events:auto;">
+                        <h3
+                            style="color:var(--accent); margin-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.1); font-size:18px; font-weight:900;">
+                            LATEST UPDATES</h3>
+                        <div style="display:flex; flex-direction:column; gap:15px;">
+                            <div class="news-item">
+                                <div style="font-weight:900; color:var(--primary); font-size:14px;">🩹 HEALING & SHIELDS
+                                </div>
+                                <div style="font-size:11px; color:var(--text-muted); line-height:1.4;">Medkits and
+                                    Shield Pots are now in crates! Use them to stay in the fight.</div>
+                            </div>
+                            <div class="news-item">
+                                <div style="font-weight:900; color:var(--secondary); font-size:14px;">🪨 MAP REFRESH
+                                </div>
+                                <div style="font-size:11px; color:var(--text-muted); line-height:1.4;">Explore wooden
+                                    platforms and use bushes to hide from enemies.</div>
+                            </div>
+                            <div class="news-item">
+                                <div style="font-weight:900; color:var(--accent); font-size:14px;">🛰️ TACTICAL RADAR
+                                </div>
+                                <div style="font-size:11px; color:var(--text-muted); line-height:1.4;">Watch the new
+                                    minimap to track enemy movement and the storm.</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -864,6 +890,13 @@
             'pump shotgun': { dmg: 35, cd: 0.9, speed: 650, count: 6 }
         };
 
+        const CONSUMABLES = {
+            'bandage': { heal: 25, type: 'hp', emoji: '🩹', rarity: 'common' },
+            'medkit': { heal: 100, type: 'hp', emoji: '🍱', rarity: 'uncommon' },
+            'mini pot': { heal: 25, type: 'shield', emoji: '🥃', rarity: 'uncommon', cap: 50 },
+            'big pot': { heal: 50, type: 'shield', emoji: '🍶', rarity: 'rare', cap: 100 }
+        };
+
         const POIS = [
             { name: "Prominence Peak", x: 1000, y: 1000 },
             { name: "Trisa's Terraces", x: 5000, y: 1000 },
@@ -972,12 +1005,13 @@
                 for (let i = 0; i < crateCount; i++) {
                     const b = this.buildings[Math.floor(Math.random() * this.buildings.length)];
                     if (!b) continue;
+                    const lootPool = ['smg', 'smg', 'pump shotgun', 'ak-47', 'bandage', 'medkit', 'mini pot', 'mini pot', 'big pot'];
                     this.crates.push({
                         x: b.x + 30 + Math.random() * (b.w - 60),
                         y: b.y + 30 + Math.random() * (b.h - 60),
                         hp: 50, alive: true, r: 25,
                         rarity: getRandomRarity(),
-                        loot: ['smg', 'pump shotgun', 'ak-47'][Math.floor(Math.random() * 3)]
+                        loot: lootPool[Math.floor(Math.random() * lootPool.length)]
                     });
                 }
             }
@@ -1116,10 +1150,28 @@
                 this.aggro = Math.random() < 0.5;
                 this.hidden = false;
                 this.revealTime = 0;
+                this.shield = 0;
+            }
+            useConsumable(engine) {
+                const wp = this.inventory[this.selectedSlot];
+                if (!wp || !CONSUMABLES[wp.type]) return;
+                const c = CONSUMABLES[wp.type];
+                if (c.type === 'hp' && this.hp >= 100) return;
+                if (c.type === 'shield' && this.shield >= (c.cap || 100)) return;
+
+                if (c.type === 'hp') this.hp = Math.min(100, this.hp + c.heal);
+                else this.shield = Math.min(c.cap || 100, this.shield + c.heal);
+
+                this.inventory[this.selectedSlot] = null;
+                audio.pickup(); // Healing sound
             }
             shoot(engine) {
                 const wp = this.inventory[this.selectedSlot];
                 if (!wp) return;
+                if (CONSUMABLES[wp.type]) {
+                    this.useConsumable(engine);
+                    return;
+                }
                 this.revealTime = 1.5; // Reveal for 1.5s when shooting
                 const w = WEAPONS[wp.type];
                 for (let i = 0; i < w.count; i++) {
@@ -1140,6 +1192,15 @@
                 if (vol > 0.05) audio.shoot(wp.type, vol);
             }
             takeDamage(amt, source, engine) {
+                if (this.shield > 0) {
+                    if (this.shield >= amt) {
+                        this.shield -= amt;
+                        amt = 0;
+                    } else {
+                        amt -= this.shield;
+                        this.shield = 0;
+                    }
+                }
                 this.hp -= amt;
                 if (this.hp <= 0 && this.alive) {
                     this.alive = false; this.hp = 0;
@@ -1753,6 +1814,14 @@
 
                     this.ctx.fillStyle = e.color || (e.isBot ? '#ef4444' : '#3b82f6');
                     this.ctx.beginPath(); this.ctx.arc(0, 0, e.r, 0, Math.PI * 2); this.ctx.fill();
+
+                    // Shield Glow Effect
+                    if (e.shield > 0) {
+                        this.ctx.strokeStyle = '#60a5fa';
+                        this.ctx.lineWidth = 4 / e.dropScale;
+                        this.ctx.beginPath(); this.ctx.arc(0, 0, e.r + 2, 0, Math.PI * 2); this.ctx.stroke();
+                    }
+
                     this.ctx.strokeStyle = '#000'; this.ctx.lineWidth = 1 / e.dropScale; this.ctx.stroke();
                     // Draw a small visor/eyes for skin character
                     this.ctx.fillStyle = '#1f2937';
@@ -1804,7 +1873,11 @@
                         const iconMap = {
                             'ak-47': '<span style="color:#ef4444">⚔️</span>',
                             'smg': '<span style="color:#f59e0b">⚡</span>',
-                            'pump shotgun': '<span style="color:#3b82f6">💥</span>'
+                            'pump shotgun': '<span style="color:#3b82f6">💥</span>',
+                            'bandage': '<span style="color:#4ade80">🩹</span>',
+                            'medkit': '<span style="color:#22c55e">🍱</span>',
+                            'mini pot': '<span style="color:#60a5fa">🥃</span>',
+                            'big pot': '<span style="color:#2563eb">🍶</span>'
                         };
                         icon.innerHTML = iconMap[wp.type] || '';
                         indicator.style.background = RARITIES[wp.rarity].color;
@@ -1814,11 +1887,35 @@
                     }
                 });
 
-                ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(20, this.cvs.height - 50, 300, 30);
-                ctx.fillStyle = (this.player.hp / 100) > 0.3 ? '#4ade80' : '#ef4444'; ctx.fillRect(20, this.cvs.height - 50, 300 * (this.player.hp / 100), 30);
-                ctx.strokeStyle = '#fff'; ctx.strokeRect(20, this.cvs.height - 50, 300, 30);
+                // Bars (Fortnite Style)
+                const barWidth = 300;
+                const barX = 20;
+                const barY = this.cvs.height - 50;
+
+                // Health Bar
+                ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(barX, barY, barWidth, 30);
+                ctx.fillStyle = (this.player.hp / 100) > 0.3 ? '#4ade80' : '#ef4444';
+                ctx.fillRect(barX, barY, barWidth * (this.player.hp / 100), 30);
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(barX, barY, barWidth, 30);
+                ctx.fillStyle = '#fff'; ctx.font = '900 12px Outfit'; ctx.textAlign = 'left';
+                ctx.fillText("HEALTH", barX + 5, barY - 5);
+
+                // Shield Bar (Always visible now)
+                ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(barX, barY - 45, barWidth, 30);
+                if (this.player.shield > 0) {
+                    ctx.fillStyle = '#3b82f6'; ctx.fillRect(barX, barY - 45, barWidth * (this.player.shield / 100), 30);
+                }
+                ctx.strokeStyle = '#fff'; ctx.strokeRect(barX, barY - 45, barWidth, 30);
+                ctx.fillStyle = '#fff'; ctx.font = '900 12px Outfit'; ctx.textAlign = 'left';
+                ctx.fillText("SHIELD", barX + 5, barY - 50);
+
+                if (this.player.shield > 0) {
+                    ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Outfit'; ctx.textAlign = 'center';
+                    ctx.fillText(Math.round(this.player.shield), barX + barWidth / 2, barY - 22);
+                }
+
                 ctx.fillStyle = '#fff'; ctx.font = 'bold 24px Outfit'; ctx.textAlign = 'left';
-                ctx.fillText(`${Math.ceil(this.player.hp)}`, 30, this.cvs.height - 27);
+                ctx.fillText(`${Math.ceil(this.player.hp)}`, barX + 10, barY + 23);
                 ctx.textAlign = 'right'; ctx.fillText(this.player.kills + " KILLS", this.cvs.width - 20, this.cvs.height - 20);
 
                 // Kill Leader Display
