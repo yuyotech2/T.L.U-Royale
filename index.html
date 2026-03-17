@@ -1010,9 +1010,13 @@
                     const rarity = mode === 'path-to-pro' ? 'mythic' : (isMedical ? 'common' : getRandomRarity());
                     let lootPool = isMedical ? ['bandage', 'medkit', 'mini pot', 'big pot'] : ['smg', 'smg', 'pump shotgun', 'ak-47'];
                     
-                    // IF rarity is high, it's very likely to be a sniper in a standard crate
-                    if (!isMedical && (rarity === 'mythic' || rarity === 'legendary') && Math.random() < 0.6) {
-                        lootPool = ['heavy sniper'];
+                    // IF rarity is high, it's likely to be a sniper, but still allows other guns
+                    if (!isMedical && (rarity === 'mythic' || rarity === 'legendary')) {
+                        if (Math.random() < 0.5) {
+                            lootPool = ['heavy sniper'];
+                        } else {
+                            lootPool = ['ak-47', 'smg', 'pump shotgun'];
+                        }
                     }
 
                     this.crates.push({
