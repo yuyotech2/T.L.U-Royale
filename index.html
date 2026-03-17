@@ -978,7 +978,7 @@
 
         // --- GAME LOGIC ---
         class GameMap {
-            constructor(w, h) {
+            constructor(w, h, mode = 'solo') {
                 this.w = w; this.h = h;
                 this.obstacles = []; this.crates = []; this.buildings = [];
                 this.stormRadius = w; this.stormCenter = { x: w / 2, y: h / 2 };
@@ -1012,7 +1012,7 @@
                         x: b.x + 30 + Math.random() * (b.w - 60),
                         y: b.y + 30 + Math.random() * (b.h - 60),
                         hp: 50, alive: true, r: 25,
-                        rarity: isMedical ? 'common' : getRandomRarity(),
+                        rarity: mode === 'path-to-pro' ? 'mythic' : (isMedical ? 'common' : getRandomRarity()),
                         loot: lootPool[Math.floor(Math.random() * lootPool.length)],
                         type: isMedical ? 'medical' : 'weapon'
                     });
@@ -1393,13 +1393,12 @@
 
                 let curMapSize = MAP_SIZE;
                 let totalTargetCount = 16;
-
                 if (mode === 'path-to-pro') {
                     curMapSize = 15000;
                     totalTargetCount = 100;
                 }
 
-                this.map = new GameMap(curMapSize, curMapSize);
+                this.map = new GameMap(curMapSize, curMapSize, mode);
 
                 const teamSize = (mode === 'solo' || mode === 'path-to-pro') ? 1 : mode === 'duo' ? 2 : 4;
                 this.player = new Entity(userData.nickname, false, 'player_team');
@@ -1650,7 +1649,7 @@
                                         this.supplyDrops.splice(idx, 1);
                                         // 50% chance for sniper, 50% for standard high-tier weapon
                                         const type = Math.random() < 0.5 ? 'heavy sniper' : Object.keys(WEAPONS)[Math.floor(Math.random()*Object.keys(WEAPONS).length)];
-                                        const rarity = Math.random() < 0.3 ? 'mythic' : 'legendary'; 
+                                        const rarity = this.currentMode === 'path-to-pro' ? 'mythic' : (Math.random() < 0.3 ? 'mythic' : 'legendary'); 
                                         this.droppedItems.push({ x: d.x, y: d.y, type, rarity, r: 15 });
                                         audio.crate();
                                     }
