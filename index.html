@@ -887,7 +887,8 @@
         const WEAPONS = {
             'ak-47': { dmg: 18, cd: 0.15, speed: 950, count: 1 },
             'smg': { dmg: 12, cd: 0.08, speed: 900, count: 1 },
-            'pump shotgun': { dmg: 35, cd: 0.9, speed: 650, count: 6 }
+            'pump shotgun': { dmg: 35, cd: 0.9, speed: 650, count: 6 },
+            'heavy sniper': { dmg: 85, cd: 1.5, speed: 1800, count: 1 }
         };
 
         const CONSUMABLES = {
@@ -1151,6 +1152,7 @@
                 this.hidden = false;
                 this.revealTime = 0;
                 this.shield = 0;
+                this.hitVFX = 0;
             }
             useConsumable(engine) {
                 const wp = this.inventory[this.selectedSlot];
@@ -1203,6 +1205,10 @@
                     }
                 }
                 this.hp -= amt;
+                this.hitVFX = 0.5; // Trigger red hit flash
+                if (amt > 0) {
+                    engine.addHitParticle(this.x, this.y);
+                }
                 if (this.hp <= 0 && this.alive) {
                     this.alive = false; this.hp = 0;
                     // Drop all loot
@@ -1231,6 +1237,9 @@
 
                 this.setupInputs();
                 this.running = false; this.state = 'lobby'; this.droppedItems = [];
+                this.supplyDrops = [];
+                this.particles = [];
+                this.dropTimer = 0;
             }
 
             normalizeAngle(a) {
@@ -1441,6 +1450,16 @@
                 const dropKey = userData.keybinds.drop === ' ' ? 'SPACE' : userData.keybinds.drop.toUpperCase();
                 document.getElementById('plane-hud').innerText = this.isTouch ? `TAP TO DROP` : `PRESS [${dropKey}] TO DROP`;
                 console.log("Game started! Mode:", mode, "MapSize:", curMapSize);
+                this.supplyDrops = []; this.particles = []; this.dropTimer = 45; // First drop at 45s
+            }
+            addHitParticle(x, y) {
+                for(let i=0; i<5; i++) {
+                    this.particles.push({
+                        x, y, 
+                        vx: (Math.random()-0.5)*200, vy: (Math.random()-0.5)*200,
+                        life: 0.3, color: '#ff0000'
+                    });
+                }
             }
             dropWeapon(ent) {
                 const wp = ent.inventory[ent.selectedSlot];
@@ -1456,6 +1475,36 @@
             update(dt) {
                 if (this.state !== 'playing') return;
                 this.map.update(dt);
+
+                // Supply Drop Logic
+                this.dropTimer -= dt;
+                if (this.dropTimer <= 0) {
+                    this.dropTimer = 90; // Every 90s
+                    this.supplyDrops.push({
+                        x: Math.random()*(this.map.w-1000)+500,
+                        y: Math.random()*(this.map.h-1000)+500,
+                        landed: false, 
+                        scale: 5,
+                        smokeTime: 30 // Smoke lasts 30s
+                    });
+                    this.addKillFeed("📦 SUPPLY DROP INBOUND!");
+                }
+
+                this.supplyDrops.forEach(d => {
+                    if (!d.landed) {
+                        d.scale -= dt * 0.5;
+                        if (d.scale <= 1) { d.scale = 1; d.landed = true; }
+                    } else {
+                        d.smokeTime -= dt;
+                    }
+                });
+
+                // Particles
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    const p = this.particles[i];
+                    p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
+                    if (p.life <= 0) this.particles.splice(i, 1);
+                }
 
                 if (this.planeActive) {
                     this.planePos.x += this.planeVel.x * dt;
@@ -1586,6 +1635,16 @@
                                     }
                                 }
                                 if (acted) this.keys[kb.interact] = false; // Only consume if we did something
+
+                                // Check supply drops
+                                this.supplyDrops.forEach((d, idx) => {
+                                    if (d.landed && Math.sqrt((d.x-e.x)**2 + (d.y-e.y)**2) < 80) {
+                                        this.supplyDrops.splice(idx, 1);
+                                        const mythicItem = Object.keys(WEAPONS)[Math.floor(Math.random()*Object.keys(WEAPONS).length)];
+                                        this.droppedItems.push({ x: d.x, y: d.y, type: mythicItem, rarity: 'mythic', r: 15 });
+                                        audio.crate();
+                                    }
+                                });
                             }
 
                             // Removed building collision for movement to allow access to crates inside buildings
@@ -1834,6 +1893,12 @@
                         this.ctx.globalAlpha = (e === this.player) ? 0.4 : 0.0;
                     }
 
+                    // Hit Flash
+                    if (e.hitVFX > 0) {
+                        this.ctx.shadowBlur = 10; this.ctx.shadowColor = '#f00';
+                        e.hitVFX -= 0.016; 
+                    }
+
                     this.ctx.fillStyle = e.color || (e.isBot ? '#ef4444' : '#3b82f6');
                     this.ctx.beginPath(); this.ctx.arc(0, 0, e.r, 0, Math.PI * 2); this.ctx.fill();
 
@@ -1872,6 +1937,36 @@
                     this.ctx.restore();
                 });
 
+                this.supplyDrops.forEach(d => {
+                    this.ctx.save();
+                    this.ctx.translate(d.x, d.y);
+                    this.ctx.scale(d.scale, d.scale);
+                    
+                    if (!d.landed) {
+                        // Drawing falling crate with parachute
+                        this.ctx.strokeStyle = '#fff'; this.ctx.lineWidth = 2;
+                        this.ctx.beginPath(); this.ctx.moveTo(-30, -50); this.ctx.lineTo(0,0);
+                        this.ctx.moveTo(30, -50); this.ctx.lineTo(0,0); this.ctx.stroke();
+                        this.ctx.fillStyle = '#facc15'; this.ctx.beginPath(); this.ctx.arc(0, -50, 40, Math.PI, 0); this.ctx.fill();
+                    } else if (d.smokeTime > 0) {
+                        // Smoke signal
+                        this.ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
+                        this.ctx.beginPath(); this.ctx.arc(0, -Math.random()*100, 20+Math.random()*20, 0, Math.PI*2); this.ctx.fill();
+                    }
+
+                    this.ctx.fillStyle = '#facc15'; this.ctx.fillRect(-25, -25, 50, 50);
+                    this.ctx.strokeStyle = '#000'; this.ctx.strokeRect(-25, -25, 50, 50);
+                    this.ctx.fillStyle = '#111'; this.ctx.font = '900 30px Outfit'; this.ctx.textAlign='center'; this.ctx.fillText("?", 0, 10);
+                    this.ctx.restore();
+                });
+
+                this.particles.forEach(p => {
+                    this.ctx.fillStyle = p.color;
+                    this.ctx.globalAlpha = p.life * 3;
+                    this.ctx.beginPath(); this.ctx.arc(p.x, p.y, 3, 0, Math.PI*2); this.ctx.fill();
+                    this.ctx.globalAlpha = 1.0;
+                });
+
                 this.bullets.forEach(b => { this.ctx.fillStyle = '#ff0'; this.ctx.beginPath(); this.ctx.arc(b.x, b.y, 4, 0, Math.PI * 2); this.ctx.fill(); });
                 this.ctx.restore();
                 this.drawHUD();
@@ -1899,7 +1994,8 @@
                             'bandage': '<span style="color:#4ade80">🩹</span>',
                             'medkit': '<span style="color:#22c55e">💊</span>',
                             'mini pot': '<span style="color:#60a5fa">🥃</span>',
-                            'big pot': '<span style="color:#2563eb">🍶</span>'
+                            'big pot': '<span style="color:#2563eb">🍶</span>',
+                            'heavy sniper': '<span style="color:#facc15">🎯</span>'
                         };
                         icon.innerHTML = iconMap[wp.type] || '';
                         indicator.style.background = RARITIES[wp.rarity].color;
