@@ -1006,13 +1006,15 @@
                 for (let i = 0; i < crateCount; i++) {
                     const b = this.buildings[Math.floor(Math.random() * this.buildings.length)];
                     if (!b) continue;
-                    const lootPool = ['smg', 'smg', 'pump shotgun', 'ak-47', 'bandage', 'medkit', 'mini pot', 'mini pot', 'big pot'];
+                    const isMedical = Math.random() < 0.35;
+                    const lootPool = isMedical ? ['bandage', 'medkit', 'mini pot', 'big pot'] : ['smg', 'smg', 'pump shotgun', 'ak-47'];
                     this.crates.push({
                         x: b.x + 30 + Math.random() * (b.w - 60),
                         y: b.y + 30 + Math.random() * (b.h - 60),
                         hp: 50, alive: true, r: 25,
                         rarity: getRandomRarity(),
-                        loot: lootPool[Math.floor(Math.random() * lootPool.length)]
+                        loot: lootPool[Math.floor(Math.random() * lootPool.length)],
+                        type: isMedical ? 'medical' : 'weapon'
                     });
                 }
             }
@@ -1073,16 +1075,22 @@
                     const s = c.r * 2;
                     const x = c.x - c.r, y = c.y - c.r;
 
-                    // Wooden Texture Base
-                    ctx.fillStyle = '#78350f'; // Darker frame
+                    // Crate Theming
+                    const isMed = c.type === 'medical';
+                    const baseColor = isMed ? '#cbd5e1' : '#78350f'; // Slate grey or dark wood
+                    const innerColor = isMed ? '#f8fafc' : '#b45309'; // White/Light grey or lighter wood
+                    const borderColor = isMed ? '#94a3b8' : '#451a03'; // Steel border or dark wood border
+
+                    // Crate Base
+                    ctx.fillStyle = baseColor;
                     ctx.fillRect(x, y, s, s);
 
-                    // Inner Planks
-                    ctx.fillStyle = '#b45309'; // Lighter wood
+                    // Inner Section
+                    ctx.fillStyle = innerColor;
                     ctx.fillRect(x + 4, y + 4, s - 8, s - 8);
 
-                    // Draw Planks Lines
-                    ctx.strokeStyle = '#78350f';
+                    // Draw Details (Lines)
+                    ctx.strokeStyle = borderColor;
                     ctx.lineWidth = 2;
                     for (let i = 1; i < 4; i++) {
                         ctx.beginPath();
@@ -1091,8 +1099,8 @@
                         ctx.stroke();
                     }
 
-                    // Frame Cross or Outline
-                    ctx.strokeStyle = '#451a03';
+                    // Frame
+                    ctx.strokeStyle = borderColor;
                     ctx.strokeRect(x, y, s, s);
                     ctx.strokeRect(x + 4, y + 4, s - 8, s - 8);
 
@@ -1764,12 +1772,18 @@
                                                 e.inventory[slot] = { type: target.type, rarity: target.rarity };
                                                 const idx = this.droppedItems.indexOf(target);
                                                 if (idx !== -1) this.droppedItems.splice(idx, 1);
+                                            } else {
+                                                // If inventory full, maybe swap? For now just wander off to avoid sticking
+                                                e.x += (Math.random()-0.5)*100 * dt; e.y += (Math.random()-0.5)*100 * dt;
                                             }
                                         }
-                                    } else { e.x += Math.cos(e.angle) * 200 * dt; e.y += Math.sin(e.angle) * 200 * dt; }
+                                    } else { 
+                                        e.x += Math.cos(e.angle) * 220 * dt; e.y += Math.sin(e.angle) * 220 * dt; 
+                                    }
                                 } else {
-                                    e.x += Math.cos(e.angle) * 120 * dt; e.y += Math.sin(e.angle) * 120 * dt;
-                                    if (Math.random() < 0.01) e.angle = Math.random() * Math.PI * 2;
+                                    // Wander with more purpose
+                                    if (Math.random() < 0.05) e.angle += (Math.random() - 0.5) * 1.5;
+                                    e.x += Math.cos(e.angle) * 150 * dt; e.y += Math.sin(e.angle) * 150 * dt;
                                 }
                             }
                         }
