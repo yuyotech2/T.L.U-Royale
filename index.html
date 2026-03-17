@@ -1012,7 +1012,7 @@
                         x: b.x + 30 + Math.random() * (b.w - 60),
                         y: b.y + 30 + Math.random() * (b.h - 60),
                         hp: 50, alive: true, r: 25,
-                        rarity: getRandomRarity(),
+                        rarity: isMedical ? 'common' : getRandomRarity(),
                         loot: lootPool[Math.floor(Math.random() * lootPool.length)],
                         type: isMedical ? 'medical' : 'weapon'
                     });
@@ -1648,8 +1648,10 @@
                                 this.supplyDrops.forEach((d, idx) => {
                                     if (d.landed && Math.sqrt((d.x-e.x)**2 + (d.y-e.y)**2) < 80) {
                                         this.supplyDrops.splice(idx, 1);
-                                        const mythicItem = Object.keys(WEAPONS)[Math.floor(Math.random()*Object.keys(WEAPONS).length)];
-                                        this.droppedItems.push({ x: d.x, y: d.y, type: mythicItem, rarity: 'mythic', r: 15 });
+                                        // 50% chance for sniper, 50% for standard high-tier weapon
+                                        const type = Math.random() < 0.5 ? 'heavy sniper' : Object.keys(WEAPONS)[Math.floor(Math.random()*Object.keys(WEAPONS).length)];
+                                        const rarity = Math.random() < 0.3 ? 'mythic' : 'legendary'; 
+                                        this.droppedItems.push({ x: d.x, y: d.y, type, rarity, r: 15 });
                                         audio.crate();
                                     }
                                 });
