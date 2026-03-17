@@ -892,7 +892,7 @@
 
         const CONSUMABLES = {
             'bandage': { heal: 25, type: 'hp', emoji: '🩹', rarity: 'common' },
-            'medkit': { heal: 100, type: 'hp', emoji: '🍱', rarity: 'uncommon' },
+            'medkit': { heal: 100, type: 'hp', emoji: '💊', rarity: 'uncommon' },
             'mini pot': { heal: 25, type: 'shield', emoji: '🥃', rarity: 'uncommon', cap: 50 },
             'big pot': { heal: 50, type: 'shield', emoji: '🍶', rarity: 'rare', cap: 100 }
         };
@@ -1897,12 +1897,15 @@
                             'smg': '<span style="color:#f59e0b">⚡</span>',
                             'pump shotgun': '<span style="color:#3b82f6">💥</span>',
                             'bandage': '<span style="color:#4ade80">🩹</span>',
-                            'medkit': '<span style="color:#22c55e">🍱</span>',
+                            'medkit': '<span style="color:#22c55e">💊</span>',
                             'mini pot': '<span style="color:#60a5fa">🥃</span>',
                             'big pot': '<span style="color:#2563eb">🍶</span>'
                         };
                         icon.innerHTML = iconMap[wp.type] || '';
                         indicator.style.background = RARITIES[wp.rarity].color;
+                        
+                        // Added Item Labels
+                        icon.innerHTML += `<div style="position:absolute; bottom:2px; left:0; width:100%; font-size:8px; font-weight:900; color:#fff; text-shadow:1px 1px #000;">${wp.type.toUpperCase()}</div>`;
                     } else {
                         icon.innerHTML = '';
                         indicator.style.background = 'transparent';
