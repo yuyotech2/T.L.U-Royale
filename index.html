@@ -1007,12 +1007,19 @@
                     const b = this.buildings[Math.floor(Math.random() * this.buildings.length)];
                     if (!b) continue;
                     const isMedical = Math.random() < 0.35;
-                    const lootPool = isMedical ? ['bandage', 'medkit', 'mini pot', 'big pot'] : ['smg', 'smg', 'pump shotgun', 'ak-47'];
+                    const rarity = mode === 'path-to-pro' ? 'mythic' : (isMedical ? 'common' : getRandomRarity());
+                    let lootPool = isMedical ? ['bandage', 'medkit', 'mini pot', 'big pot'] : ['smg', 'smg', 'pump shotgun', 'ak-47'];
+                    
+                    // IF rarity is high, it's very likely to be a sniper in a standard crate
+                    if (!isMedical && (rarity === 'mythic' || rarity === 'legendary') && Math.random() < 0.6) {
+                        lootPool = ['heavy sniper'];
+                    }
+
                     this.crates.push({
                         x: b.x + 30 + Math.random() * (b.w - 60),
                         y: b.y + 30 + Math.random() * (b.h - 60),
                         hp: 50, alive: true, r: 25,
-                        rarity: mode === 'path-to-pro' ? 'mythic' : (isMedical ? 'common' : getRandomRarity()),
+                        rarity: rarity,
                         loot: lootPool[Math.floor(Math.random() * lootPool.length)],
                         type: isMedical ? 'medical' : 'weapon'
                     });
@@ -1647,8 +1654,8 @@
                                 this.supplyDrops.forEach((d, idx) => {
                                     if (d.landed && Math.sqrt((d.x-e.x)**2 + (d.y-e.y)**2) < 80) {
                                         this.supplyDrops.splice(idx, 1);
-                                        // 50% chance for sniper, 50% for standard high-tier weapon
-                                        const type = Math.random() < 0.5 ? 'heavy sniper' : Object.keys(WEAPONS)[Math.floor(Math.random()*Object.keys(WEAPONS).length)];
+                                        // 80% chance for sniper in supply drops, 20% for random high-tier weapon
+                                        const type = Math.random() < 0.8 ? 'heavy sniper' : Object.keys(WEAPONS)[Math.floor(Math.random()*Object.keys(WEAPONS).length)];
                                         const rarity = this.currentMode === 'path-to-pro' ? 'mythic' : (Math.random() < 0.3 ? 'mythic' : 'legendary'); 
                                         this.droppedItems.push({ x: d.x, y: d.y, type, rarity, r: 15 });
                                         audio.crate();
