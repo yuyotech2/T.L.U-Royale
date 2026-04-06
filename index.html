@@ -2180,7 +2180,7 @@
 
         class NetworkManager {
             constructor() {
-                this.peer = null; this.conn = null; this.isHost = false;
+                this.peer = null; this.conns = []; this.isHost = false;
             }
             initHost() {
                 this.isHost = true;
@@ -2194,7 +2194,7 @@
                 });
                 this.peer.on('connection', c => {
                     console.log("New Connection from:", c.peer);
-                    this.conn = c; this.setupConn();
+                    this.conns.push(c); this.setupConn(c);
                 });
                 this.peer.on('error', err => {
                     console.error("Peer Host Error:", err);
@@ -2216,8 +2216,9 @@
                 this.peer = new Peer();
                 this.peer.on('open', () => {
                     console.log("Joiner Peer Open. Connecting to:", id);
-                    this.conn = this.peer.connect(id);
-                    this.setupConn();
+                    const c = this.peer.connect(id);
+                    this.conns = [c];
+                    this.setupConn(c);
                 });
                 this.peer.on('error', err => {
                     console.error("Peer Join Error:", err);
@@ -2226,30 +2227,50 @@
                     document.getElementById('btn-join').style.background = "var(--secondary)";
                 });
             }
-            setupConn() {
-                this.conn.on('open', () => {
+            setupConn(c) {
+                c.on('open', () => {
                     this.send({ type: 'join_request', name: userData.nickname, color: userData.skin.color });
-                    document.getElementById('btn-join').innerText = "CONNECTED!";
-                    document.getElementById('btn-join').style.background = "#3b82f6";
+                    const btn = document.getElementById('btn-join');
+                    if (btn) {
+                        btn.innerText = "CONNECTED!";
+                        btn.style.background = "#3b82f6";
+                    }
                 });
-                this.conn.on('data', data => this.handleData(data));
+                c.on('data', data => this.handleData(data));
+                c.on('close', () => {
+                    this.conns = this.conns.filter(conn => conn !== c);
+                    userData.party = userData.party.filter(p => p.id !== c.peer);
+                    renderParty();
+                });
             }
             handleData(data) {
                 if (data.type === 'join_request') {
                     if (userData.party.length < 3) {
-                        userData.party.push({ name: data.name, color: data.color, id: this.conn.peer });
+                        userData.party.push({ name: data.name, color: data.color, id: data.id });
                         renderParty();
-                        this.send({ type: 'sync_party', party: userData.party });
+                        // Send current full list + host's info so guest knows who is hosting
+                        this.send({ 
+                            type: 'sync_party', 
+                            party: userData.party, 
+                            hostInfo: { name: userData.nickname, color: userData.skin.color, id: this.peer.id } 
+                        });
                     }
                 }
                 if (data.type === 'sync_party') {
-                    userData.party = data.party;
+                    // Filter out yourself from the list to avoid duplicates, and add the host
+                    userData.party = data.party.filter(p => p.id !== this.peer.id);
+                    if (data.hostInfo && data.hostInfo.id !== this.peer.id) {
+                        if (!userData.party.find(p => p.id === data.hostInfo.id)) {
+                            userData.party.push(data.hostInfo);
+                        }
+                    }
                     renderParty();
                 }
                 if (data.type === 'start_game') {
                     engine.start(data.mode);
                 }
                 if (data.type === 'player_update' && engine.state === 'playing') {
+                    if (this.isHost) this.send(data); // Relay to others
                     const ent = engine.entities.find(e => e.netId === data.id);
                     if (ent) {
                         ent.x = data.x; ent.y = data.y; ent.angle = data.angle;
@@ -2258,15 +2279,16 @@
                     }
                 }
                 if (data.type === 'player_shoot' && engine.state === 'playing') {
+                    if (this.isHost) this.send(data); // Relay to others
                     const ent = engine.entities.find(e => e.netId === data.id);
                     if (ent) ent.shoot(engine);
                 }
             }
             send(data) {
-                if (this.conn && this.conn.open) {
-                    data.id = this.peer.id;
-                    this.conn.send(data);
-                }
+                if (!data.id) data.id = this.peer.id;
+                this.conns.forEach(c => {
+                    if (c.open) c.send(data);
+                });
             }
         }
         const network = new NetworkManager();
@@ -2279,8 +2301,8 @@
             if (!list || !count) return;
             list.innerHTML = `
                 <div style="display:flex; gap:10px; align-items:center;">
-                    <div style="width:10px; height:10px; background:#4ade80; border-radius:50%;"></div>
-                    <span style="font-weight:700;">YOU (CROWNED)</span>
+                    <div style="width:10px; height:10px; background:${userData.skin.color}; border-radius:50%;"></div>
+                    <span style="font-weight:700;">${userData.nickname.toUpperCase()} (YOU) 👑</span>
                 </div>
             `;
             userData.party.forEach(mate => {
