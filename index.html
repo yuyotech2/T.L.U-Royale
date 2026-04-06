@@ -860,6 +860,7 @@
                 const keybinds = { ...userData.keybinds, ...(parsed.keybinds || {}) };
                 userData = { ...userData, ...parsed, keybinds };
             }
+            userData.party = []; // Fixed: Always start with an empty lobby
             document.getElementById('player-nick').value = userData.nickname;
             document.getElementById('display-name').innerText = userData.nickname;
             document.getElementById('display-wins').innerText = `🏆 ${userData.wins} Wins`;
