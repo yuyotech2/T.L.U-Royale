@@ -2189,13 +2189,16 @@
             }
             initHost() {
                 this.isHost = true;
-                // Using server-assigned IDs for 100% stability (no collisions)
-                this.peer = new Peer({ debug: 2, secure: true });
+                const config = {
+                    debug: 2,
+                    config: { 'iceServers': [{ 'urls': 'stun:stun.l.google.com:19302' }, { 'urls': 'stun:stun1.l.google.com:19302' }] }
+                };
+                this.peer = new Peer(config);
                 this.peer.on('open', id => {
                     console.info("HOST ONLINE (Room Code:", id, ")");
                     const codeEl = document.getElementById('my-code');
                     codeEl.innerText = id;
-                    codeEl.style.fontSize = '14px'; // Server IDs are long
+                    codeEl.style.fontSize = '12px'; 
                     document.getElementById('room-code-display').style.display = 'block';
                     document.getElementById('btn-host').style.display = 'none';
 
@@ -2210,7 +2213,7 @@
                 });
                 this.peer.on('error', err => {
                     console.error("Peer Host Error:", err);
-                    alert("NETWORK ERROR: " + err.type + "\nTry refreshing the page.");
+                    alert("NETWORK ERROR: " + err.type);
                 });
             }
             initJoin(id) {
@@ -2219,27 +2222,29 @@
                 document.getElementById('btn-join').style.background = "#ca8a04";
 
                 if (this.peer) this.peer.destroy();
-                this.peer = new Peer({ debug: 2, secure: true });
+                const config = {
+                    debug: 2,
+                    config: { 'iceServers': [{ 'urls': 'stun:stun.l.google.com:19302' }, { 'urls': 'stun:stun1.l.google.com:19302' }] }
+                };
+                this.peer = new Peer(config);
                 this.peer.on('open', (localId) => {
-                    console.info("JOINER ONLINE. Requesting connection to:", id);
-                    const c = this.peer.connect(id.trim(), { reliable: true });
+                    console.info("JOINER ONLINE. Requesting:", id);
+                    const c = this.peer.connect(id.trim());
                     this.conns = [c];
                     this.setupConn(c);
                     
-                    // Fail-safe if connection never opens
                     setTimeout(() => {
                         if (this.conns.length > 0 && !this.conns[0].open) {
-                            alert("CONNECTION TIMEOUT. Ensure you copied the FULL room code correctly!");
+                            alert("CONNECTION TIMEOUT. Check the code one last time!");
                             document.getElementById('btn-join').innerText = "JOIN ROOM";
                             document.getElementById('btn-join').style.background = "var(--secondary)";
                         }
                     }, 5000);
                 });
                 this.peer.on('error', err => {
-                    console.error("PeerJS Error:", err);
+                    console.error("Join PeerJS Error:", err);
                     alert("NETWORK ERROR: " + err.type);
                     document.getElementById('btn-join').innerText = "JOIN ROOM";
-                    document.getElementById('btn-join').style.background = "var(--secondary)";
                 });
             }
             setupConn(c) {
