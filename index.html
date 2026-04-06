@@ -636,6 +636,7 @@
                         style="margin-top:15px; background:rgba(59, 130, 246, 0.1); padding:15px; border-radius:10px; border:1px solid rgba(59, 130, 246, 0.3);">
                         <div style="font-weight:900; color:#60a5fa; font-size:12px; margin-bottom:10px;">ONLINE
                             MULTIPLAYER (BETA)</div>
+                        <div id="net-status" style="font-size:10px; color:#9ca3af; background:rgba(0,0,0,0.4); padding:5px; border-radius:5px; margin-bottom:10px; font-family:monospace;">OFFLINE</div>
                         <div id="host-section">
                             <button id="btn-host" class="btn-primary"
                                 style="width:100%; padding:8px; font-size:14px; background:#60a5fa;">HOST
@@ -2185,14 +2186,15 @@
             }
             initHost() {
                 this.isHost = true;
-                const code = Math.floor(1000 + Math.random() * 9000);
+                const log = document.getElementById('net-status');
+                if (log) log.innerText = "STARTING HOST...";
                 const config = {
                     debug: 2,
                     config: { 'iceServers': [{ 'urls': 'stun:stun.l.google.com:19302' }, { 'urls': 'stun:stun1.l.google.com:19302' }] }
                 };
                 this.peer = new Peer('TLU-' + code, config);
                 this.peer.on('open', id => {
-                    console.info("HOST ONLINE (Room Code:", code, ")");
+                    if (log) log.innerText = "HOST ONLINE! (TLU-" + code + ")";
                     document.getElementById('my-code').innerText = code; 
                     document.getElementById('room-code-display').style.display = 'block';
                     document.getElementById('btn-host').style.display = 'none';
@@ -2243,12 +2245,12 @@
                 });
             }
             setupConn(c) {
+                const log = document.getElementById('net-status');
                 c.on('error', err => {
-                    console.error("Connection Error:", err);
-                    alert("CONNECTION FAILED: " + err.message);
+                    if (log) log.innerText = "ERROR: " + err.message;
                 });
                 c.on('open', () => {
-                    console.info("CHANNEL OPENED WITH:", c.peer);
+                    if (log) log.innerText = "CHANNEL SECURE (SYNCING...)";
                     this.send({ type: 'join_request', name: userData.nickname, color: userData.skin.color });
                     const btn = document.getElementById('btn-join');
                     if (btn) {
@@ -2264,11 +2266,12 @@
                 });
             }
             handleData(data) {
+                const log = document.getElementById('net-status');
                 if (data.type === 'join_request') {
+                    if (log) log.innerText = "JOIN REQUEST RECEIVED!";
                     if (userData.party.length < 3) {
                         userData.party.push({ name: data.name, color: data.color, id: data.id });
                         renderParty();
-                        // Send current full list + host's info so guest knows who is hosting
                         this.send({ 
                             type: 'sync_party', 
                             party: userData.party, 
@@ -2277,7 +2280,7 @@
                     }
                 }
                 if (data.type === 'sync_party') {
-                    // Filter out yourself from the list to avoid duplicates, and add the host
+                    if (log) log.innerText = "LOBBY JOINED (SYNCING...)";
                     userData.party = data.party.filter(p => p.id !== this.peer.id);
                     if (data.hostInfo && data.hostInfo.id !== this.peer.id) {
                         if (!userData.party.find(p => p.id === data.hostInfo.id)) {
