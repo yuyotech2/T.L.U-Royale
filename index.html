@@ -643,12 +643,8 @@
                             <div id="room-code-display"
                                 style="display:none; margin-top:10px; background:#000; padding:10px; border-radius:5px; text-align:center;">
                                 <div style="font-size:10px; color:#9ca3af;">YOUR ROOM CODE</div>
-                                <div style="display:flex; justify-content:center; align-items:center; gap:10px; margin: 5px 0;">
-                                    <div id="my-code" style="font-size:16px; font-weight:900; color:#fff; word-break:break-all;">----</div>
-                                    <button id="copy-code" style="padding:4px 8px; font-size:10px; background:#4ade80; color:#000; border:none; border-radius:4px; font-weight:900; cursor:pointer;">COPY</button>
-                                </div>
-                                <div style="font-size:10px; color:#4ade80; margin-top:5px;">WAITING FOR
-                                    FRIENDS...</div>
+                                <div id="my-code" style="font-size:32px; font-weight:900; color:#4ade80; letter-spacing:5px;">----</div>
+                                <div style="font-size:10px; color:#4ade80; margin-top:5px;">WAITING FOR FRIENDS...</div>
                             </div>
                         </div>
                         <div id="join-section"
@@ -2189,23 +2185,17 @@
             }
             initHost() {
                 this.isHost = true;
+                const code = Math.floor(1000 + Math.random() * 9000);
                 const config = {
                     debug: 2,
                     config: { 'iceServers': [{ 'urls': 'stun:stun.l.google.com:19302' }, { 'urls': 'stun:stun1.l.google.com:19302' }] }
                 };
-                this.peer = new Peer(config);
+                this.peer = new Peer('TLU-' + code, config);
                 this.peer.on('open', id => {
-                    console.info("HOST ONLINE (Room Code:", id, ")");
-                    const codeEl = document.getElementById('my-code');
-                    codeEl.innerText = id;
-                    codeEl.style.fontSize = '12px'; 
+                    console.info("HOST ONLINE (Room Code:", code, ")");
+                    document.getElementById('my-code').innerText = code; 
                     document.getElementById('room-code-display').style.display = 'block';
                     document.getElementById('btn-host').style.display = 'none';
-
-                    document.getElementById('copy-code').onclick = () => {
-                        navigator.clipboard.writeText(id);
-                        alert("Room Code Copied!");
-                    };
                 });
                 this.peer.on('connection', c => {
                     console.info("Peer Connected:", c.peer);
@@ -2213,11 +2203,16 @@
                 });
                 this.peer.on('error', err => {
                     console.error("Peer Host Error:", err);
-                    alert("NETWORK ERROR: " + err.type);
+                    if (err.type === 'unavailable-id') {
+                        this.initHost(); // Auto-retry if code taken!
+                    } else {
+                        alert("NETWORK ERROR: " + err.type);
+                    }
                 });
             }
             initJoin(id) {
                 this.isHost = false;
+                if (!id.startsWith('TLU-')) id = 'TLU-' + id;
                 document.getElementById('btn-join').innerText = "CONNECTING...";
                 document.getElementById('btn-join').style.background = "#ca8a04";
 
@@ -2235,7 +2230,7 @@
                     
                     setTimeout(() => {
                         if (this.conns.length > 0 && !this.conns[0].open) {
-                            alert("CONNECTION TIMEOUT. Check the code one last time!");
+                            alert("CONNECTION TIMEOUT. Check the 4-digit code and try once more!");
                             document.getElementById('btn-join').innerText = "JOIN ROOM";
                             document.getElementById('btn-join').style.background = "var(--secondary)";
                         }
