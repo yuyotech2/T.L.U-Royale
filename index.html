@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
     <style>
         :root {
             --primary: #4ade80;
@@ -561,7 +561,7 @@
                 </div>
                 <div class="logo-container">
                     <h1 class="game-logo">T.L.U ROYALE</h1>
-                    <span class="game-version">V.2.3.0 (MULTI-PLAYER STABLE)</span>
+                    <span class="game-version">V.2.4.0 (SINGLEPLAYER FOCUS)</span>
                 </div>
                 <div class="utility-btns" style="display:flex; gap:10px;">
                     <a href="https://www.youtube.com/channel/UCErso5LLwaSSWml8K-IAE4w" target="_blank"
@@ -631,32 +631,7 @@
                             INVITE BOTS</button>
                     </div>
 
-                    <!-- REAL MULTIPLAYER HUB -->
-                    <div id="multiplayer-hub"
-                        style="margin-top:15px; background:rgba(59, 130, 246, 0.1); padding:15px; border-radius:10px; border:1px solid rgba(59, 130, 246, 0.3);">
-                        <div style="font-weight:900; color:#60a5fa; font-size:12px; margin-bottom:10px;">ONLINE
-                            MULTIPLAYER (BETA)</div>
-                        <div id="net-status" style="font-size:10px; color:#9ca3af; background:rgba(0,0,0,0.4); padding:5px; border-radius:5px; margin-bottom:10px; font-family:monospace;">OFFLINE</div>
-                        <div id="host-section">
-                            <button id="btn-host" class="btn-primary"
-                                style="width:100%; padding:8px; font-size:14px; background:#60a5fa;">HOST
-                                SERVER</button>
-                            <div id="room-code-display"
-                                style="display:none; margin-top:10px; background:#000; padding:10px; border-radius:5px; text-align:center;">
-                                <div style="font-size:10px; color:#9ca3af;">YOUR ROOM CODE</div>
-                                <div id="my-code" style="font-size:32px; font-weight:900; color:#4ade80; letter-spacing:5px;">----</div>
-                                <div style="font-size:10px; color:#4ade80; margin-top:5px;">WAITING FOR FRIENDS...</div>
-                            </div>
-                        </div>
-                        <div id="join-section"
-                            style="margin-top:10px; border-top:1px solid rgba(255,255,255,0.1); padding-top:10px;">
-                            <input type="text" id="join-code" placeholder="ENTER ROOM CODE"
-                                style="width:100%; padding:8px; background:#1f2937; border:none; border-radius:6px; color:#fff; text-align:center; font-weight:900; margin-bottom:5px;">
-                            <button id="btn-join"
-                                style="width:100%; padding:8px; background:#4ade80; border:none; border-radius:6px; color:#fff; font-weight:900; cursor:pointer;">JOIN
-                                FRIEND</button>
-                        </div>
-                    </div>
+
                     <div class="news-panel"
                         style="position:absolute; right:40px; top:120px; width:280px; background:var(--panel-bg); border:2px solid var(--panel-border); border-radius:15px; padding:20px; text-align:left; pointer-events:auto;">
                         <h3
@@ -1712,8 +1687,6 @@
                                         e.shoot(this);
                                         e.cd = WEAPONS[itm.type] ? WEAPONS[itm.type].cd : 2.0;
 
-                                        // Sync Shoot
-                                        if (network.conn) network.send({ type: 'player_shoot', x: e.x, y: e.y, angle: e.angle });
                                     }
                                 }
                             }
@@ -1722,23 +1695,7 @@
                                 const itm = e.inventory[e.selectedSlot];
                                 e.shoot(this);
                                 e.cd = WEAPONS[itm.type] ? WEAPONS[itm.type].cd : 2.0;
-                                
-                                // Sync Shoot
-                                if (network.conn) network.send({ type: 'player_shoot', x: e.x, y: e.y, angle: e.angle });
                             }
-
-                            // Sync Position (Every frame for smoothness)
-                            if (network.conn && (Math.abs(e.x - (e.lx || 0)) > 1 || Math.abs(e.y - (e.ly || 0)) > 1 || Math.abs(e.angle - (e.la || 0)) > 0.05)) {
-                                network.send({
-                                    type: 'player_update',
-                                    x: e.x, y: e.y, angle: e.angle, hp: e.hp, shield: e.shield,
-                                    state: e.state, slot: e.selectedSlot
-                                });
-                                e.lx = e.x; e.ly = e.y; e.la = e.angle;
-                            }
-                        } else if (e.netId) {
-                            // Network Controlled Player
-                            // (Movement handled by NetworkManager packet reception)
                         } else {
                             // Bots can now freely enter buildings to loot crates.
                             // Removed old collision logic to prevent spinning.
@@ -2180,144 +2137,7 @@
             }
         }
 
-        class NetworkManager {
-            constructor() {
-                this.peer = null; this.conns = []; this.isHost = false;
-            }
-            initHost() {
-                this.isHost = true;
-                const log = document.getElementById('net-status');
-                if (log) log.innerText = "STARTING HOST...";
-                const config = {
-                    debug: 2,
-                    config: { 'iceServers': [{ 'urls': 'stun:stun.l.google.com:19302' }, { 'urls': 'stun:stun1.l.google.com:19302' }] }
-                };
-                this.peer = new Peer('TLU-' + code, config);
-                this.peer.on('open', id => {
-                    if (log) log.innerText = "HOST ONLINE! (TLU-" + code + ")";
-                    document.getElementById('my-code').innerText = code; 
-                    document.getElementById('room-code-display').style.display = 'block';
-                    document.getElementById('btn-host').style.display = 'none';
-                });
-                this.peer.on('connection', c => {
-                    console.info("Peer Connected:", c.peer);
-                    this.conns.push(c); this.setupConn(c);
-                });
-                this.peer.on('error', err => {
-                    console.error("Peer Host Error:", err);
-                    if (err.type === 'unavailable-id') {
-                        this.initHost(); // Auto-retry if code taken!
-                    } else {
-                        alert("NETWORK ERROR: " + err.type);
-                    }
-                });
-            }
-            initJoin(id) {
-                this.isHost = false;
-                if (!id.startsWith('TLU-')) id = 'TLU-' + id;
-                document.getElementById('btn-join').innerText = "CONNECTING...";
-                document.getElementById('btn-join').style.background = "#ca8a04";
-
-                if (this.peer) this.peer.destroy();
-                const config = {
-                    debug: 2,
-                    config: { 'iceServers': [{ 'urls': 'stun:stun.l.google.com:19302' }, { 'urls': 'stun:stun1.l.google.com:19302' }] }
-                };
-                this.peer = new Peer(config);
-                this.peer.on('open', (localId) => {
-                    console.info("JOINER ONLINE. Requesting:", id);
-                    const c = this.peer.connect(id.trim());
-                    this.conns = [c];
-                    this.setupConn(c);
-                    
-                    setTimeout(() => {
-                        if (this.conns.length > 0 && !this.conns[0].open) {
-                            alert("CONNECTION TIMEOUT. Check the 4-digit code and try once more!");
-                            document.getElementById('btn-join').innerText = "JOIN ROOM";
-                            document.getElementById('btn-join').style.background = "var(--secondary)";
-                        }
-                    }, 5000);
-                });
-                this.peer.on('error', err => {
-                    console.error("Join PeerJS Error:", err);
-                    alert("NETWORK ERROR: " + err.type);
-                    document.getElementById('btn-join').innerText = "JOIN ROOM";
-                });
-            }
-            setupConn(c) {
-                const log = document.getElementById('net-status');
-                c.on('error', err => {
-                    if (log) log.innerText = "ERROR: " + err.message;
-                });
-                c.on('open', () => {
-                    if (log) log.innerText = "CHANNEL SECURE (SYNCING...)";
-                    this.send({ type: 'join_request', name: userData.nickname, color: userData.skin.color });
-                    const btn = document.getElementById('btn-join');
-                    if (btn) {
-                        btn.innerText = "CONNECTED!";
-                        btn.style.background = "#3b82f6";
-                    }
-                });
-                c.on('data', data => this.handleData(data));
-                c.on('close', () => {
-                    this.conns = this.conns.filter(conn => conn !== c);
-                    userData.party = userData.party.filter(p => p.id !== c.peer);
-                    renderParty();
-                });
-            }
-            handleData(data) {
-                const log = document.getElementById('net-status');
-                if (data.type === 'join_request') {
-                    if (log) log.innerText = "JOIN REQUEST RECEIVED!";
-                    if (userData.party.length < 3) {
-                        userData.party.push({ name: data.name, color: data.color, id: data.id });
-                        renderParty();
-                        this.send({ 
-                            type: 'sync_party', 
-                            party: userData.party, 
-                            hostInfo: { name: userData.nickname, color: userData.skin.color, id: this.peer.id } 
-                        });
-                    }
-                }
-                if (data.type === 'sync_party') {
-                    if (log) log.innerText = "LOBBY JOINED (SYNCING...)";
-                    userData.party = data.party.filter(p => p.id !== this.peer.id);
-                    if (data.hostInfo && data.hostInfo.id !== this.peer.id) {
-                        if (!userData.party.find(p => p.id === data.hostInfo.id)) {
-                            userData.party.push(data.hostInfo);
-                        }
-                    }
-                    renderParty();
-                }
-                if (data.type === 'start_game') {
-                    engine.start(data.mode);
-                }
-                if (data.type === 'player_update' && engine.state === 'playing') {
-                    if (this.isHost) this.send(data); // Relay to others
-                    const ent = engine.entities.find(e => e.netId === data.id);
-                    if (ent) {
-                        ent.x = data.x; ent.y = data.y; ent.angle = data.angle;
-                        ent.hp = data.hp; ent.shield = data.shield;
-                        ent.state = data.state; ent.selectedSlot = data.slot;
-                    }
-                }
-                if (data.type === 'player_shoot' && engine.state === 'playing') {
-                    if (this.isHost) this.send(data); // Relay to others
-                    const ent = engine.entities.find(e => e.netId === data.id);
-                    if (ent) ent.shoot(engine);
-                }
-            }
-            send(data) {
-                if (!data.id) data.id = this.peer.id;
-                this.conns.forEach(c => {
-                    if (c.open) c.send(data);
-                });
-            }
-        }
-        const network = new NetworkManager();
-
         const engine = new GameEngine();
-
         function renderParty() {
             const list = document.getElementById('party-list');
             const count = document.getElementById('party-count');
@@ -2331,15 +2151,15 @@
             userData.party.forEach(mate => {
                 const div = document.createElement('div');
                 div.style.cssText = 'display:flex; gap:10px; align-items:center;';
-                const isBot = mate.isBot || !mate.id || mate.id.toString().startsWith('bot-');
                 div.innerHTML = `
                     <div style="width:10px; height:10px; background:${mate.color}; border-radius:50%;"></div>
-                    <span style="font-weight:700;">${mate.name.toUpperCase()} ${isBot ? '<span style="color:#9ca3af; font-size:10px;">(BOT)</span>' : '<span style="color:#4ade80; font-size:10px;">(CONNECTED)</span>'}</span>
+                    <span style="font-weight:700;">${mate.name.toUpperCase()} <span style="color:#9ca3af; font-size:10px;">(BOT)</span></span>
                 `;
                 list.appendChild(div);
             });
             count.innerText = `PARTY (${userData.party.length + 1}/4)`;
         }
+        renderParty(); 
 
         document.getElementById('invite-btn').onclick = () => {
             if (userData.party.length < 3) {
@@ -2347,8 +2167,7 @@
                 userData.party.push({ name, color: SKINS[Math.floor(Math.random() * SKINS.length)].color, isBot: true, id: 'bot-' + Math.random() });
                 renderParty();
             } else {
-                // Clear ONLY bots to make room for friends
-                userData.party = userData.party.filter(p => !p.isBot);
+                userData.party = [];
                 renderParty();
             }
         };
@@ -2360,22 +2179,10 @@
                 else if (b.classList.contains('duo')) mode = 'duo';
                 else if (b.classList.contains('squad')) mode = 'squad';
                 else if (b.classList.contains('path-to-pro')) mode = 'path-to-pro';
-
-                if (network.isHost) network.send({ type: 'start_game', mode: mode });
                 engine.start(mode);
             };
         });
-
-        document.getElementById('btn-host').onclick = () => network.initHost();
-        document.getElementById('btn-join').onclick = () => {
-            const code = document.getElementById('join-code').value.trim().toUpperCase();
-            if (code) network.initJoin(code);
-            else alert("PLEASE ENTER A ROOM CODE!");
-        };
-
-        renderParty();
     </script>
-    <!-- [ FINAL STABLE VERSION 2.0.1 ] -->
 </body>
 
 </html>
