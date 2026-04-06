@@ -1277,6 +1277,9 @@
 
             setupInputs() {
                 window.onkeydown = (e) => {
+                    // Fix: Allow typing in input fields
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
                     const k = e.key.toLowerCase();
                     this.keys[k] = true;
                     const gameKeys = ['w', 'a', 's', 'd', 'e', 'q', 'tab', ' '];
