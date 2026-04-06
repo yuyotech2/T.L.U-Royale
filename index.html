@@ -2189,15 +2189,15 @@
             initHost() {
                 this.isHost = true;
                 const code = Math.floor(1000 + Math.random() * 9000);
-                this.peer = new Peer('TLU-' + code);
+                this.peer = new Peer('TLU-' + code, { debug: 2, secure: true });
                 this.peer.on('open', id => {
-                    console.log("Host Peer Open:", id);
-                    document.getElementById('my-code').innerText = code; // Just show the numbers for ease
+                    console.info("HOST ONLINE (Room Code:", code, ")");
+                    document.getElementById('my-code').innerText = code; 
                     document.getElementById('room-code-display').style.display = 'block';
                     document.getElementById('btn-host').style.display = 'none';
                 });
                 this.peer.on('connection', c => {
-                    console.log("New Connection from:", c.peer);
+                    console.info("Peer Connected:", c.peer);
                     this.conns.push(c); this.setupConn(c);
                 });
                 this.peer.on('error', err => {
@@ -2211,28 +2211,42 @@
             }
             initJoin(id) {
                 this.isHost = false;
-                // If user only put numbers, add the prefix
                 if (!id.startsWith('TLU-')) id = 'TLU-' + id;
                 
                 document.getElementById('btn-join').innerText = "CONNECTING...";
                 document.getElementById('btn-join').style.background = "#ca8a04";
 
-                this.peer = new Peer();
-                this.peer.on('open', () => {
-                    console.log("Joiner Peer Open. Connecting to:", id);
-                    const c = this.peer.connect(id);
+                if (this.peer) this.peer.destroy();
+                this.peer = new Peer({ debug: 2, secure: true });
+                this.peer.on('open', (localId) => {
+                    console.info("JOINER ONLINE. Requesting connection to:", id);
+                    const c = this.peer.connect(id, { reliable: true });
                     this.conns = [c];
                     this.setupConn(c);
+                    
+                    // Fail-safe if connection never opens
+                    setTimeout(() => {
+                        if (this.conns.length > 0 && !this.conns[0].open) {
+                            alert("CONNECTION TIMEOUT. The Host might be offline or using the wrong code.");
+                            document.getElementById('btn-join').innerText = "JOIN ROOM";
+                            document.getElementById('btn-join').style.background = "var(--secondary)";
+                        }
+                    }, 5000);
                 });
                 this.peer.on('error', err => {
-                    console.error("Peer Join Error:", err);
-                    alert("COULD NOT CONNECT. Error: " + err.type);
+                    console.error("PeerJS Error:", err);
+                    alert("NETWORK ERROR: " + err.type);
                     document.getElementById('btn-join').innerText = "JOIN ROOM";
                     document.getElementById('btn-join').style.background = "var(--secondary)";
                 });
             }
             setupConn(c) {
+                c.on('error', err => {
+                    console.error("Connection Error:", err);
+                    alert("CONNECTION FAILED: " + err.message);
+                });
                 c.on('open', () => {
+                    console.info("CHANNEL OPENED WITH:", c.peer);
                     this.send({ type: 'join_request', name: userData.nickname, color: userData.skin.color });
                     const btn = document.getElementById('btn-join');
                     if (btn) {
