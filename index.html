@@ -1172,6 +1172,7 @@
                 this.revealTime = 0;
                 this.shield = 0;
                 this.hitVFX = 0;
+                this.netId = null; // Used for multiplayer sync
             }
             useConsumable(engine) {
                 const wp = this.inventory[this.selectedSlot];
@@ -1421,8 +1422,10 @@
                     const teammateCount = teamSize - 1;
                     for (let i = 0; i < teammateCount; i++) {
                         const friend = userData.party[i] || { name: "Bot_" + (i + 1), color: SKINS[Math.floor(Math.random() * SKINS.length)].color };
-                        const mate = new Entity(friend.name, true, 'player_team');
+                        const isReal = !!userData.party[i]; // If they are in the lobby list, they are real
+                        const mate = new Entity(friend.name, !isReal, 'player_team');
                         mate.color = friend.color;
+                        if (isReal) mate.netId = friend.id || 'remote'; // Temporary peer mapping
                         this.entities.push(mate);
                     }
                 }
@@ -1697,6 +1700,7 @@
                                 if (aimTarget) {
                                     const angTo = Math.atan2(aimTarget.y - e.y, aimTarget.x - e.x);
                                     // Soft lock: pull angle towards target
+                                    // Soft lock: pull angle towards target
                                     e.angle = this.lerpAngle(e.angle, angTo, 0.2);
 
                                     // Auto-Fire: If nearly perfectly aimed, shoot!
@@ -1705,6 +1709,9 @@
                                         const itm = e.inventory[e.selectedSlot];
                                         e.shoot(this);
                                         e.cd = WEAPONS[itm.type] ? WEAPONS[itm.type].cd : 2.0;
+
+                                        // Sync Shoot
+                                        if (network.conn) network.send({ type: 'player_shoot', x: e.x, y: e.y, angle: e.angle });
                                     }
                                 }
                             }
@@ -1713,7 +1720,23 @@
                                 const itm = e.inventory[e.selectedSlot];
                                 e.shoot(this);
                                 e.cd = WEAPONS[itm.type] ? WEAPONS[itm.type].cd : 2.0;
+                                
+                                // Sync Shoot
+                                if (network.conn) network.send({ type: 'player_shoot', x: e.x, y: e.y, angle: e.angle });
                             }
+
+                            // Sync Position (Every frame for smoothness)
+                            if (network.conn && (Math.abs(e.x - (e.lx || 0)) > 1 || Math.abs(e.y - (e.ly || 0)) > 1 || Math.abs(e.angle - (e.la || 0)) > 0.05)) {
+                                network.send({
+                                    type: 'player_update',
+                                    x: e.x, y: e.y, angle: e.angle, hp: e.hp, shield: e.shield,
+                                    state: e.state, slot: e.selectedSlot
+                                });
+                                e.lx = e.x; e.ly = e.y; e.la = e.angle;
+                            }
+                        } else if (e.netId) {
+                            // Network Controlled Player
+                            // (Movement handled by NetworkManager packet reception)
                         } else {
                             // Bots can now freely enter buildings to loot crates.
                             // Removed old collision logic to prevent spinning.
@@ -2081,6 +2104,45 @@
                 ctx.fillStyle = 'rgba(255,255,255,0.7)';
                 ctx.fillText(`STORM: ${Math.floor(this.map.stormRadius)}m`, this.cvs.width / 2, 110);
 
+                // --- TEAMMATE INDICATORS ---
+                this.entities.forEach(ent => {
+                    if (ent.team === this.player.team && ent !== this.player && ent.alive) {
+                        const screenX = ent.x - this.player.x + this.cvs.width / 2;
+                        const screenY = ent.y - this.player.y + this.cvs.height / 2;
+                        
+                        const margin = 50;
+                        const isOffScreen = screenX < margin || screenX > this.cvs.width - margin || screenY < margin || screenY > this.cvs.height - margin;
+                        
+                        if (isOffScreen) {
+                            // Clamp to screen edges
+                            const cx = Math.max(margin, Math.min(this.cvs.width - margin, screenX));
+                            const cy = Math.max(margin, Math.min(this.cvs.height - margin, screenY));
+                            
+                            ctx.save();
+                            ctx.translate(cx, cy);
+                            const angle = Math.atan2(screenY - this.cvs.height/2, screenX - this.cvs.width/2);
+                            ctx.rotate(angle);
+                            
+                            // Arrow
+                            ctx.fillStyle = ent.color || '#4ade80';
+                            ctx.beginPath();
+                            ctx.moveTo(15, 0); ctx.lineTo(-10, -10); ctx.lineTo(-10, 10); ctx.closePath();
+                            ctx.fill();
+                            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+                            
+                            // Name tag near arrow
+                            ctx.rotate(-angle);
+                            ctx.fillStyle = '#fff'; ctx.font = 'bold 12px Outfit'; ctx.textAlign = 'center';
+                            ctx.fillText(ent.name.toUpperCase(), 0, 25);
+                            ctx.restore();
+                        } else {
+                            // On screen tag
+                            ctx.fillStyle = '#fff'; ctx.font = 'bold 14px Outfit'; ctx.textAlign = 'center';
+                            ctx.fillText("⬇️ " + ent.name.toUpperCase(), screenX, screenY - 45);
+                        }
+                    }
+                });
+
                 // --- MINIMAP RENDERING ---
                 const mm = document.getElementById('minimap-container');
                 mm.style.display = 'block';
@@ -2156,7 +2218,7 @@
             handleData(data) {
                 if (data.type === 'join_request') {
                     if (userData.party.length < 3) {
-                        userData.party.push({ name: data.name, color: data.color });
+                        userData.party.push({ name: data.name, color: data.color, id: this.conn.peer });
                         renderParty();
                         this.send({ type: 'sync_party', party: userData.party });
                     }
@@ -2168,9 +2230,24 @@
                 if (data.type === 'start_game') {
                     engine.start(data.mode);
                 }
+                if (data.type === 'player_update' && engine.state === 'playing') {
+                    const ent = engine.entities.find(e => e.netId === data.id);
+                    if (ent) {
+                        ent.x = data.x; ent.y = data.y; ent.angle = data.angle;
+                        ent.hp = data.hp; ent.shield = data.shield;
+                        ent.state = data.state; ent.selectedSlot = data.slot;
+                    }
+                }
+                if (data.type === 'player_shoot' && engine.state === 'playing') {
+                    const ent = engine.entities.find(e => e.netId === data.id);
+                    if (ent) ent.shoot(engine);
+                }
             }
             send(data) {
-                if (this.conn && this.conn.open) this.conn.send(data);
+                if (this.conn && this.conn.open) {
+                    data.id = this.peer.id;
+                    this.conn.send(data);
+                }
             }
         }
         const network = new NetworkManager();
