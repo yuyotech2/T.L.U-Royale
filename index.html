@@ -643,9 +643,10 @@
                             <div id="room-code-display"
                                 style="display:none; margin-top:10px; background:#000; padding:10px; border-radius:5px; text-align:center;">
                                 <div style="font-size:10px; color:#9ca3af;">YOUR ROOM CODE</div>
-                                <div id="my-code"
-                                    style="font-size:20px; font-weight:900; letter-spacing:2px; color:#fff;">
-                                    ----</div>
+                                <div style="display:flex; justify-content:center; align-items:center; gap:10px; margin: 5px 0;">
+                                    <div id="my-code" style="font-size:16px; font-weight:900; color:#fff; word-break:break-all;">----</div>
+                                    <button id="copy-code" style="padding:4px 8px; font-size:10px; background:#4ade80; color:#000; border:none; border-radius:4px; font-weight:900; cursor:pointer;">COPY</button>
+                                </div>
                                 <div style="font-size:10px; color:#4ade80; margin-top:5px;">WAITING FOR
                                     FRIENDS...</div>
                             </div>
@@ -2188,13 +2189,20 @@
             }
             initHost() {
                 this.isHost = true;
-                const code = Math.floor(1000 + Math.random() * 9000);
-                this.peer = new Peer('TLU-' + code, { debug: 2, secure: true });
+                // Using server-assigned IDs for 100% stability (no collisions)
+                this.peer = new Peer({ debug: 2, secure: true });
                 this.peer.on('open', id => {
-                    console.info("HOST ONLINE (Room Code:", code, ")");
-                    document.getElementById('my-code').innerText = code; 
+                    console.info("HOST ONLINE (Room Code:", id, ")");
+                    const codeEl = document.getElementById('my-code');
+                    codeEl.innerText = id;
+                    codeEl.style.fontSize = '14px'; // Server IDs are long
                     document.getElementById('room-code-display').style.display = 'block';
                     document.getElementById('btn-host').style.display = 'none';
+
+                    document.getElementById('copy-code').onclick = () => {
+                        navigator.clipboard.writeText(id);
+                        alert("Room Code Copied!");
+                    };
                 });
                 this.peer.on('connection', c => {
                     console.info("Peer Connected:", c.peer);
@@ -2202,17 +2210,11 @@
                 });
                 this.peer.on('error', err => {
                     console.error("Peer Host Error:", err);
-                    if (err.type === 'unavailable-id') {
-                        this.initHost(); // Try again with new ID
-                    } else {
-                        alert("NETWORK ERROR: " + err.type);
-                    }
+                    alert("NETWORK ERROR: " + err.type + "\nTry refreshing the page.");
                 });
             }
             initJoin(id) {
                 this.isHost = false;
-                if (!id.startsWith('TLU-')) id = 'TLU-' + id;
-                
                 document.getElementById('btn-join').innerText = "CONNECTING...";
                 document.getElementById('btn-join').style.background = "#ca8a04";
 
@@ -2220,14 +2222,14 @@
                 this.peer = new Peer({ debug: 2, secure: true });
                 this.peer.on('open', (localId) => {
                     console.info("JOINER ONLINE. Requesting connection to:", id);
-                    const c = this.peer.connect(id, { reliable: true });
+                    const c = this.peer.connect(id.trim(), { reliable: true });
                     this.conns = [c];
                     this.setupConn(c);
                     
                     // Fail-safe if connection never opens
                     setTimeout(() => {
                         if (this.conns.length > 0 && !this.conns[0].open) {
-                            alert("CONNECTION TIMEOUT. The Host might be offline or using the wrong code.");
+                            alert("CONNECTION TIMEOUT. Ensure you copied the FULL room code correctly!");
                             document.getElementById('btn-join').innerText = "JOIN ROOM";
                             document.getElementById('btn-join').style.background = "var(--secondary)";
                         }
