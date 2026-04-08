@@ -775,31 +775,31 @@
             }
             shoot(type, vol = 1.0) {
                 if (type === 'heavy sniper') {
-                    this.playTone(80, 0.4, 'sine', 0.5 * vol);
-                    this.playNoise(0.5, 0.3 * vol);
+                    this.playTone(60, 0.6, 'sine', 0.6 * vol);
+                    this.playNoise(0.6, 0.4 * vol, 600);
                 } else if (type === 'pump shotgun') {
-                    this.playTone(60, 0.2, 'sawtooth', 0.4 * vol);
-                    this.playNoise(0.2, 0.5 * vol);
+                    this.playTone(50, 0.3, 'sawtooth', 0.5 * vol);
+                    this.playNoise(0.3, 0.6 * vol, 800);
                 } else if (type === 'ak-47') {
-                    this.playTone(150, 0.1, 'square', 0.2 * vol);
-                    this.playNoise(0.1, 0.2 * vol);
+                    this.playTone(100, 0.15, 'square', 0.3 * vol);
+                    this.playNoise(0.15, 0.3 * vol, 1200);
                 } else { // SMG
-                    this.playTone(300, 0.08, 'square', 0.15 * vol);
-                    this.playNoise(0.08, 0.1 * vol);
+                    this.playTone(180, 0.1, 'square', 0.2 * vol);
+                    this.playNoise(0.1, 0.2 * vol, 1500);
                 }
             }
             walk() {
-                this.playTone(50, 0.05, 'sine', 0.05);
+                this.playTone(40, 0.05, 'sine', 0.05);
             }
             crate() {
-                this.playTone(150, 0.3, 'triangle', 0.2);
-                this.playNoise(0.1, 0.1);
+                this.playTone(120, 0.4, 'triangle', 0.2);
+                this.playNoise(0.2, 0.1, 800);
             }
             pickup() {
-                this.playTone(523.25, 0.05, 'sine', 0.1); // C5
-                setTimeout(() => this.playTone(659.25, 0.1, 'sine', 0.1), 50); // E5
+                this.playTone(523.25, 0.05, 'sine', 0.1);
+                setTimeout(() => this.playTone(659.25, 0.1, 'sine', 0.1), 50);
             }
-            playNoise(dur, vol) {
+            playNoise(dur, vol, filterFreq = 1000) {
                 if (this.ctx.state === 'suspended') this.ctx.resume();
                 const bufferSize = this.ctx.sampleRate * dur;
                 const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
@@ -807,10 +807,18 @@
                 for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
                 const noise = this.ctx.createBufferSource();
                 noise.buffer = buffer;
+                
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(filterFreq, this.ctx.currentTime);
+                filter.Q.setValueAtTime(5, this.ctx.currentTime); // Add some punch
+                
                 const gain = this.ctx.createGain();
                 gain.gain.setValueAtTime(vol, this.ctx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + dur);
-                noise.connect(gain);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
+                
+                noise.connect(filter);
+                filter.connect(gain);
                 gain.connect(this.ctx.destination);
                 noise.start();
                 noise.stop(this.ctx.currentTime + dur);
@@ -821,9 +829,9 @@
                 const gain = this.ctx.createGain();
                 osc.type = type;
                 osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + dur);
+                osc.frequency.exponentialRampToValueAtTime(freq * 0.5, this.ctx.currentTime + dur);
                 gain.gain.setValueAtTime(vol, this.ctx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + dur);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
                 osc.connect(gain);
                 gain.connect(this.ctx.destination);
                 osc.start();
