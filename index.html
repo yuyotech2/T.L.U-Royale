@@ -1760,17 +1760,18 @@
                                 if (WEAPONS[itm.type]) {
                                     e.angle = Math.atan2(targetEntity.y - e.y, targetEntity.x - e.x);
                                     if (e.cd <= 0) { e.shoot(this); e.cd = WEAPONS[itm.type].cd * 1.5; }
+                                    e.angle = this.avoidObstacles(e, e.angle);
                                     e.x += Math.cos(e.angle) * 160 * dt; e.y += Math.sin(e.angle) * 160 * dt;
                                 } else {
-                                    // Bot holding consumable - switch to a weapon if in combat
                                     let weaponSlot = e.inventory.findIndex(w => w && WEAPONS[w.type]);
                                     if (weaponSlot !== -1) e.selectedSlot = weaponSlot;
                                 }
                             } else if (e.team === 'player_team') {
-                                // Follow Player
+                                // Follow Player with avoidance
                                 const dp = Math.sqrt((this.player.x - e.x) ** 2 + (this.player.y - e.y) ** 2);
                                 if (dp > 150) {
                                     e.angle = Math.atan2(this.player.y - e.y, this.player.x - e.x);
+                                    e.angle = this.avoidObstacles(e, e.angle);
                                     e.x += Math.cos(e.angle) * 180 * dt; e.y += Math.sin(e.angle) * 180 * dt;
                                 }
                             } else {
@@ -1797,7 +1798,7 @@
                                         let healSlot = e.inventory.findIndex(w => w && CONSUMABLES[w.type]);
                                         if (healSlot !== -1) {
                                             e.selectedSlot = healSlot;
-                                            if (e.cd <= 0) e.shoot(this); // 'shoot' uses the consumable
+                                            if (e.cd <= 0) e.shoot(this);
                                         }
                                     }
 
@@ -1813,19 +1814,30 @@
                                                 const idx = this.droppedItems.indexOf(target);
                                                 if (idx !== -1) this.droppedItems.splice(idx, 1);
                                             } else {
-                                                // If inventory full, maybe swap? For now just wander off to avoid sticking
                                                 e.x += (Math.random()-0.5)*100 * dt; e.y += (Math.random()-0.5)*100 * dt;
                                             }
                                         }
                                     } else { 
+                                        e.angle = this.avoidObstacles(e, e.angle);
                                         e.x += Math.cos(e.angle) * 220 * dt; e.y += Math.sin(e.angle) * 220 * dt; 
                                     }
                                 } else {
-                                    // Wander with more purpose
                                     if (Math.random() < 0.05) e.angle += (Math.random() - 0.5) * 1.5;
+                                    e.angle = this.avoidObstacles(e, e.angle);
                                     e.x += Math.cos(e.angle) * 150 * dt; e.y += Math.sin(e.angle) * 150 * dt;
                                 }
                             }
+
+                            // Bot-to-Bot Repulsion to prevent stacking
+                            this.entities.forEach(other => {
+                                if (other !== e && other.alive && other.state === 'playing') {
+                                    const d = Math.sqrt((other.x - e.x) ** 2 + (other.y - e.y) ** 2);
+                                    if (d < e.r + other.r) {
+                                        const ang = Math.atan2(e.y - other.y, e.x - other.x);
+                                        e.x += Math.cos(ang) * 50 * dt; e.y += Math.sin(ang) * 50 * dt;
+                                    }
+                                }
+                            });
                         }
 
                         // Item Pickup (Bots and Player now separate or shared?)
@@ -2204,6 +2216,19 @@
                     mctx.fill();
                 });
                 mctx.restore();
+            }
+            avoidObstacles(e, targetAng) {
+                let finalAng = targetAng;
+                this.map.obstacles.forEach(o => {
+                    if (o.type === 'bush') return;
+                    const d = Math.sqrt((o.x - e.x) ** 2 + (o.y - e.y) ** 2);
+                    if (d < o.r + e.r + 5) {
+                        const angTo = Math.atan2(o.y - e.y, o.x - e.x);
+                        const diff = this.normalizeAngle(finalAng - angTo);
+                        finalAng += (diff > 0 ? 0.4 : -0.4);
+                    }
+                });
+                return finalAng;
             }
             loop(t) {
                 let dt = (t - (this.lastTime || t)) / 1000;
