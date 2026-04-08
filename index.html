@@ -1192,7 +1192,9 @@
                 this.revealTime = 0;
                 this.shield = 0;
                 this.hitVFX = 0;
-                this.netId = null; // Used for multiplayer sync
+                this.netId = null; 
+                this.stuckTimer = 0;
+                this.stuckAng = 0;
             }
             useConsumable(engine) {
                 const wp = this.inventory[this.selectedSlot];
@@ -1760,18 +1762,45 @@
                                 if (WEAPONS[itm.type]) {
                                     e.angle = Math.atan2(targetEntity.y - e.y, targetEntity.x - e.x);
                                     if (e.cd <= 0) { e.shoot(this); e.cd = WEAPONS[itm.type].cd * 1.5; }
-                                    e.angle = this.avoidObstacles(e, e.angle);
+                                    
+                                    // Global Stuck & Avoidance
+                                    const distMoved = Math.sqrt((e.x - (e.oldX || e.x))**2 + (e.y - (e.oldY || e.y))**2);
+                                    e.oldX = e.x; e.oldY = e.y;
+                                    if (distMoved < 10 * dt) e.stuckTimer += dt;
+                                    else e.stuckTimer = 0;
+
+                                    if (e.stuckTimer > 0.5) {
+                                        if (e.stuckTimer > 1.5) e.stuckTimer = 0;
+                                        if (Math.random() < 0.02) e.stuckAng = e.angle + (Math.random() > 0.5 ? 2 : -2);
+                                        e.angle = e.stuckAng;
+                                    } else {
+                                        e.angle = this.avoidObstacles(e, e.angle);
+                                    }
+
                                     e.x += Math.cos(e.angle) * 160 * dt; e.y += Math.sin(e.angle) * 160 * dt;
                                 } else {
                                     let weaponSlot = e.inventory.findIndex(w => w && WEAPONS[w.type]);
                                     if (weaponSlot !== -1) e.selectedSlot = weaponSlot;
                                 }
                             } else if (e.team === 'player_team') {
-                                // Follow Player with avoidance
+                                // Follow Player with awareness
                                 const dp = Math.sqrt((this.player.x - e.x) ** 2 + (this.player.y - e.y) ** 2);
                                 if (dp > 150) {
                                     e.angle = Math.atan2(this.player.y - e.y, this.player.x - e.x);
-                                    e.angle = this.avoidObstacles(e, e.angle);
+                                    
+                                    const distMoved = Math.sqrt((e.x - (e.oldX || e.x))**2 + (e.y - (e.oldY || e.y))**2);
+                                    e.oldX = e.x; e.oldY = e.y;
+                                    if (distMoved < 10 * dt) e.stuckTimer += dt;
+                                    else e.stuckTimer = 0;
+
+                                    if (e.stuckTimer > 0.5) {
+                                        if (e.stuckTimer > 1.5) e.stuckTimer = 0;
+                                        if (Math.random() < 0.02) e.stuckAng = e.angle + (Math.random() > 0.5 ? 2 : -2);
+                                        e.angle = e.stuckAng;
+                                    } else {
+                                        e.angle = this.avoidObstacles(e, e.angle);
+                                    }
+
                                     e.x += Math.cos(e.angle) * 180 * dt; e.y += Math.sin(e.angle) * 180 * dt;
                                 }
                             } else {
@@ -1818,7 +1847,20 @@
                                             }
                                         }
                                     } else { 
-                                        e.angle = this.avoidObstacles(e, e.angle);
+                                        // Stuck Check
+                                        const distMoved = Math.sqrt((e.x - (e.oldX || e.x))**2 + (e.y - (e.oldY || e.y))**2);
+                                        e.oldX = e.x; e.oldY = e.y;
+                                        if (distMoved < 10 * dt) e.stuckTimer += dt;
+                                        else e.stuckTimer = 0;
+
+                                        if (e.stuckTimer > 0.5) {
+                                            if (e.stuckTimer > 1.5) e.stuckTimer = 0;
+                                            if (Math.random() < 0.02) e.stuckAng = e.angle + (Math.random() > 0.5 ? 2 : -2);
+                                            e.angle = e.stuckAng;
+                                        } else {
+                                            e.angle = this.avoidObstacles(e, e.angle);
+                                        }
+
                                         e.x += Math.cos(e.angle) * 220 * dt; e.y += Math.sin(e.angle) * 220 * dt; 
                                     }
                                 } else {
@@ -2221,11 +2263,16 @@
                 let finalAng = targetAng;
                 this.map.obstacles.forEach(o => {
                     if (o.type === 'bush') return;
-                    const d = Math.sqrt((o.x - e.x) ** 2 + (o.y - e.y) ** 2);
-                    if (d < o.r + e.r + 5) {
-                        const angTo = Math.atan2(o.y - e.y, o.x - e.x);
+                    const dx = o.x - e.x;
+                    const dy = o.y - e.y;
+                    const d = Math.sqrt(dx*dx + dy*dy);
+                    const margin = o.r + e.r + 35; // Increased look-ahead margin
+                    if (d < margin) {
+                        const angTo = Math.atan2(dy, dx);
                         const diff = this.normalizeAngle(finalAng - angTo);
-                        finalAng += (diff > 0 ? 0.4 : -0.4);
+                        // Smoothly steer away based on proximity
+                        const strength = (1 - (d / margin)) * 0.5;
+                        finalAng += (diff > 0 ? strength : -strength);
                     }
                 });
                 return finalAng;
