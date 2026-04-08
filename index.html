@@ -765,6 +765,69 @@
         <canvas id="game-canvas"></canvas>
     </div>
 
+    <!-- Fresh Salad Bowls Section -->
+    <section id="salads" class="menu-sections">
+        <div class="container">
+            <h2 class="section-title">Fresh Salad Bowls</h2>
+            <div class="menu-grid">
+                <!-- Salad Card 1 -->
+                <div class="salad-card">
+                    <div class="salad-image-container">
+                        <img src="https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&auto=format&fit=crop&q=60" alt="Gourmet Salad Bowl" class="salad-image">
+                        <div class="calories-badge">380 kcal</div>
+                    </div>
+                    <div class="salad-content">
+                        <div class="salad-header">
+                            <h3 class="salad-title">Gourmet Garden Bowl</h3>
+                            <span class="salad-price">$12.99</span>
+                        </div>
+                        <p class="salad-description">A vibrant mix of field greens, roasted beetroots, goat cheese, toasted walnuts, and honey-lemon dressing.</p>
+                        <div class="salad-footer">
+                            <div class="dietary-tags">
+                                <span class="dietary-tag">Vegetarian</span>
+                                <span class="dietary-tag">Healthy</span>
+                            </div>
+                            <button class="add-btn">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                </svg>
+                                Add
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <!-- Salad Card 2 -->
+                <div class="salad-card">
+                    <div class="salad-image-container">
+                        <img src="https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&auto=format&fit=crop&q=60" alt="Harvest Grain Bowl" class="salad-image">
+                        <div class="calories-badge">420 kcal</div>
+                    </div>
+                    <div class="salad-content">
+                        <div class="salad-header">
+                            <h3 class="salad-title">Harvest Grain Bowl</h3>
+                            <span class="salad-price">$13.50</span>
+                        </div>
+                        <p class="salad-description">Warm quinoa, roasted sweet potatoes, kale, toasted pumpkin seeds, and a maple-balsamic glaze.</p>
+                        <div class="salad-footer">
+                            <div class="dietary-tags">
+                                <span class="dietary-tag">Vegan</span>
+                                <span class="dietary-tag">Gluten Free</span>
+                            </div>
+                            <button class="add-btn">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                </svg>
+                                Add
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <script>
         // --- DATA PERSISTENCE ---
         const SAVE_KEY = 'TLU_ROYALE_SAVE';
@@ -1748,7 +1811,7 @@
                             // Bots can now freely enter buildings to loot crates.
                             // Removed old collision logic to prevent spinning.
                             // Enhanced Bot Life - Fights anyone nearby
-                            let targetEntity = null, targetDist = 1500; // Larger search range
+                            let targetEntity = null, targetDist = 1500;
                             this.entities.forEach(other => {
                                 if (other !== e && other.alive && other.team !== e.team && (other.state === 'playing' || other.state === 'dropping')) {
                                     if (other.hidden) return; // Bots can't see hidden targets
@@ -1756,73 +1819,49 @@
                                     if (d < targetDist) { targetDist = d; targetEntity = other; }
                                 }
                             });
+                            // --- NEW VECTOR-BASED BOT STEERING ---
+                            let targetX = e.x, targetY = e.y;
+                            let hasTarget = false;
+                            let baseSpeed = 160;
 
                             if (targetEntity && e.inventory[e.selectedSlot]) {
                                 const itm = e.inventory[e.selectedSlot];
                                 if (WEAPONS[itm.type]) {
-                                    e.angle = Math.atan2(targetEntity.y - e.y, targetEntity.x - e.x);
+                                    targetX = targetEntity.x; targetY = targetEntity.y;
+                                    hasTarget = true;
                                     if (e.cd <= 0) { e.shoot(this); e.cd = WEAPONS[itm.type].cd * 1.5; }
-                                    
-                                    // Global Stuck & Avoidance
-                                    const distMoved = Math.sqrt((e.x - (e.oldX || e.x))**2 + (e.y - (e.oldY || e.y))**2);
-                                    e.oldX = e.x; e.oldY = e.y;
-                                    if (distMoved < 10 * dt) e.stuckTimer += dt;
-                                    else e.stuckTimer = 0;
-
-                                    if (e.stuckTimer > 0.5) {
-                                        if (e.stuckTimer > 1.5) e.stuckTimer = 0;
-                                        if (Math.random() < 0.02) e.stuckAng = e.angle + (Math.random() > 0.5 ? 2 : -2);
-                                        e.angle = e.stuckAng;
-                                    } else {
-                                        e.angle = this.avoidObstacles(e, e.angle);
-                                    }
-
-                                    e.x += Math.cos(e.angle) * 160 * dt; e.y += Math.sin(e.angle) * 160 * dt;
+                                    baseSpeed = 160;
                                 } else {
                                     let weaponSlot = e.inventory.findIndex(w => w && WEAPONS[w.type]);
                                     if (weaponSlot !== -1) e.selectedSlot = weaponSlot;
                                 }
                             } else if (e.team === 'player_team') {
-                                // Follow Player with awareness
                                 const dp = Math.sqrt((this.player.x - e.x) ** 2 + (this.player.y - e.y) ** 2);
                                 if (dp > 150) {
-                                    e.angle = Math.atan2(this.player.y - e.y, this.player.x - e.x);
-                                    
-                                    const distMoved = Math.sqrt((e.x - (e.oldX || e.x))**2 + (e.y - (e.oldY || e.y))**2);
-                                    e.oldX = e.x; e.oldY = e.y;
-                                    if (distMoved < 10 * dt) e.stuckTimer += dt;
-                                    else e.stuckTimer = 0;
-
-                                    if (e.stuckTimer > 0.5) {
-                                        if (e.stuckTimer > 1.5) e.stuckTimer = 0;
-                                        if (Math.random() < 0.02) e.stuckAng = e.angle + (Math.random() > 0.5 ? 2 : -2);
-                                        e.angle = e.stuckAng;
-                                    } else {
-                                        e.angle = this.avoidObstacles(e, e.angle);
-                                    }
-
-                                    e.x += Math.cos(e.angle) * 180 * dt; e.y += Math.sin(e.angle) * 180 * dt;
+                                    targetX = this.player.x; targetY = this.player.y;
+                                    hasTarget = true;
+                                    baseSpeed = 180;
                                 }
                             } else {
-                                // Find closest item or crate
-                                let target = null, minDist = 800;
+                                let lootTarget = null, minDist = 800;
                                 this.droppedItems.forEach(item => {
                                     const dist = Math.sqrt((item.x - e.x) ** 2 + (item.y - e.y) ** 2);
-                                    if (dist < minDist) { minDist = dist; target = item; }
+                                    if (dist < minDist) { minDist = dist; lootTarget = item; }
                                 });
-                                if (!target) {
+                                if (!lootTarget) {
                                     this.map.crates.forEach(c => {
                                         if (c.alive) {
                                             const dist = Math.sqrt((c.x - e.x) ** 2 + (c.y - e.y) ** 2);
-                                            if (dist < minDist) { minDist = dist; target = c; }
+                                            if (dist < minDist) { minDist = dist; lootTarget = c; }
                                         }
                                     });
                                 }
 
-                                if (target) {
-                                    e.angle = Math.atan2(target.y - e.y, target.x - e.x);
+                                if (lootTarget) {
+                                    targetX = lootTarget.x; targetY = lootTarget.y;
+                                    hasTarget = true;
+                                    baseSpeed = 220;
                                     
-                                    // Bot Healing Logic
                                     if (e.hp < 75 || e.shield < 50) {
                                         let healSlot = e.inventory.findIndex(w => w && CONSUMABLES[w.type]);
                                         if (healSlot !== -1) {
@@ -1832,54 +1871,67 @@
                                     }
 
                                     if (minDist < 55) {
-                                        if (target.loot) { // Crate
-                                            target.alive = false;
-                                            this.droppedItems.push({ x: target.x, y: target.y, type: target.loot, rarity: target.rarity, r: 15 });
+                                        if (lootTarget.loot) {
+                                            lootTarget.alive = false;
+                                            this.droppedItems.push({ x: lootTarget.x, y: lootTarget.y, type: lootTarget.loot, rarity: lootTarget.rarity, r: 15 });
                                             if (Math.random() < 0.1) audio.crate();
-                                        } else { // Item
+                                        } else {
                                             let slot = e.inventory.indexOf(null);
                                             if (slot !== -1) {
-                                                e.inventory[slot] = { type: target.type, rarity: target.rarity };
-                                                const idx = this.droppedItems.indexOf(target);
+                                                e.inventory[slot] = { type: lootTarget.type, rarity: lootTarget.rarity };
+                                                const idx = this.droppedItems.indexOf(lootTarget);
                                                 if (idx !== -1) this.droppedItems.splice(idx, 1);
                                             } else {
-                                                e.x += (Math.random()-0.5)*100 * dt; e.y += (Math.random()-0.5)*100 * dt;
+                                                e.x += (Math.random()-0.5)*50 * dt; e.y += (Math.random()-0.5)*50 * dt;
                                             }
                                         }
-                                    } else { 
-                                        // Stuck Check
-                                        const distMoved = Math.sqrt((e.x - (e.oldX || e.x))**2 + (e.y - (e.oldY || e.y))**2);
-                                        e.oldX = e.x; e.oldY = e.y;
-                                        if (distMoved < 10 * dt) e.stuckTimer += dt;
-                                        else e.stuckTimer = 0;
-
-                                        if (e.stuckTimer > 0.5) {
-                                            if (e.stuckTimer > 1.5) e.stuckTimer = 0;
-                                            if (Math.random() < 0.02) e.stuckAng = e.angle + (Math.random() > 0.5 ? 2 : -2);
-                                            e.angle = e.stuckAng;
-                                        } else {
-                                            e.angle = this.avoidObstacles(e, e.angle);
-                                        }
-
-                                        e.x += Math.cos(e.angle) * 220 * dt; e.y += Math.sin(e.angle) * 220 * dt; 
+                                        hasTarget = false; // Stop moving if at loot
                                     }
                                 } else {
-                                    if (Math.random() < 0.05) e.angle += (Math.random() - 0.5) * 1.5;
-                                    e.angle = this.avoidObstacles(e, e.angle);
-                                    e.x += Math.cos(e.angle) * 150 * dt; e.y += Math.sin(e.angle) * 150 * dt;
+                                    // Idle Wander
+                                    if (Math.random() < 0.02) e.angle += (Math.random() - 0.5) * 2;
+                                    e.x += Math.cos(e.angle) * 120 * dt; e.y += Math.sin(e.angle) * 120 * dt;
                                 }
                             }
 
-                            // Bot-to-Bot Repulsion to prevent stacking
-                            this.entities.forEach(other => {
-                                if (other !== e && other.alive && other.state === 'playing') {
-                                    const d = Math.sqrt((other.x - e.x) ** 2 + (other.y - e.y) ** 2);
-                                    if (d < e.r + other.r) {
-                                        const ang = Math.atan2(e.y - other.y, e.x - other.x);
-                                        e.x += Math.cos(ang) * 50 * dt; e.y += Math.sin(ang) * 50 * dt;
+                            if (hasTarget) {
+                                let moveX = targetX - e.x, moveY = targetY - e.y;
+                                let dist = Math.sqrt(moveX*moveX + moveY*moveY);
+                                moveX /= dist; moveY /= dist; // Normalize
+
+                                // Add Obstacle Repulsion
+                                this.map.obstacles.forEach(o => {
+                                    if (o.type === 'bush') return;
+                                    const dx = e.x - o.x, dy = e.y - o.y;
+                                    const d = Math.sqrt(dx*dx + dy*dy);
+                                    if (d < o.r + e.r + 40) {
+                                        const force = (1 - d/(o.r + e.r + 40)) * 2;
+                                        moveX += (dx/d) * force; moveY += (dy/d) * force;
                                     }
-                                }
-                            });
+                                });
+
+                                // Add Bot Repulsion
+                                this.entities.forEach(other => {
+                                    if (other !== e && other.alive && other.state === 'playing') {
+                                        const dx = e.x - other.x, dy = e.y - other.y;
+                                        const d = Math.sqrt(dx*dx + dy*dy);
+                                        if (d < e.r + other.r + 10) {
+                                            const force = (1 - d/(e.r + other.r + 10)) * 1.5;
+                                            moveX += (dx/d) * force; moveY += (dy/d) * force;
+                                        }
+                                    }
+                                });
+
+                                e.angle = Math.atan2(moveY, moveX);
+                                // Smoothing the movement to prevent "tweaking"
+                                e.velX = (e.velX || 0) * 0.8 + moveX * 0.2;
+                                e.velY = (e.velY || 0) * 0.8 + moveY * 0.2;
+                                
+                                e.x += e.velX * baseSpeed * dt;
+                                e.y += e.velY * baseSpeed * dt;
+                            } else {
+                                e.velX = 0; e.velY = 0;
+                            }
                         }
 
                         // Item Pickup (Bots and Player now separate or shared?)
@@ -2258,24 +2310,6 @@
                     mctx.fill();
                 });
                 mctx.restore();
-            }
-            avoidObstacles(e, targetAng) {
-                let finalAng = targetAng;
-                this.map.obstacles.forEach(o => {
-                    if (o.type === 'bush') return;
-                    const dx = o.x - e.x;
-                    const dy = o.y - e.y;
-                    const d = Math.sqrt(dx*dx + dy*dy);
-                    const margin = o.r + e.r + 35; // Increased look-ahead margin
-                    if (d < margin) {
-                        const angTo = Math.atan2(dy, dx);
-                        const diff = this.normalizeAngle(finalAng - angTo);
-                        // Smoothly steer away based on proximity
-                        const strength = (1 - (d / margin)) * 0.5;
-                        finalAng += (diff > 0 ? strength : -strength);
-                    }
-                });
-                return finalAng;
             }
             loop(t) {
                 let dt = (t - (this.lastTime || t)) / 1000;
