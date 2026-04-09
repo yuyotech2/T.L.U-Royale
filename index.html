@@ -1846,8 +1846,8 @@
                                 const itm = e.inventory[e.selectedSlot];
                                 e.shoot(this);
                                 e.cd = WEAPONS[itm.type] ? WEAPONS[itm.type].cd : 2.0;
-                            }
-                            // --- BOT BRAIN & STEERING ---
+                            } else {
+                                // --- BOT BRAIN & STEERING ---
                             let moveX = 0, moveY = 0;
                             let baseSpeed = 160;
                             let targetEntity = null, targetDist = 1500;
