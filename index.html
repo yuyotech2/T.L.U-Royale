@@ -1876,18 +1876,36 @@
                                 }
                             } else {
                                 // Loot Search State
+                                if (e.lootCD === undefined) e.lootCD = 0;
+                                if (e.lootCD > 0) e.lootCD -= dt;
+
                                 let lootTarget = null, minDist = 800;
-                                this.droppedItems.forEach(item => {
-                                    const dist = Math.sqrt((item.x - e.x) ** 2 + (item.y - e.y) ** 2);
-                                    if (dist < minDist) { minDist = dist; lootTarget = item; }
-                                });
-                                if (!lootTarget) {
-                                    this.map.crates.forEach(c => {
-                                        if (c.alive) {
-                                            const dist = Math.sqrt((c.x - e.x) ** 2 + (c.y - e.y) ** 2);
-                                            if (dist < minDist) { minDist = dist; lootTarget = c; }
+                                if (e.lootCD <= 0) {
+                                    const rarityOrder = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'];
+                                    this.droppedItems.forEach(item => {
+                                        // Ignore if full and not a rarity upgrade for current weapons
+                                        let hasSpace = e.inventory.includes(null);
+                                        let isUpgrade = false;
+                                        if (!hasSpace) {
+                                            const itemScore = rarityOrder.indexOf(item.rarity);
+                                            e.inventory.forEach(inv => {
+                                                if (inv && rarityOrder.indexOf(inv.rarity) < itemScore) isUpgrade = true;
+                                            });
+                                        }
+
+                                        if (hasSpace || isUpgrade) {
+                                            const dist = Math.sqrt((item.x - e.x) ** 2 + (item.y - e.y) ** 2);
+                                            if (dist < minDist) { minDist = dist; lootTarget = item; }
                                         }
                                     });
+                                    if (!lootTarget) {
+                                        this.map.crates.forEach(c => {
+                                            if (c.alive) {
+                                                const dist = Math.sqrt((c.x - e.x) ** 2 + (c.y - e.y) ** 2);
+                                                if (dist < minDist) { minDist = dist; lootTarget = c; }
+                                            }
+                                        });
+                                    }
                                 }
 
                                 if (lootTarget) {
@@ -1895,20 +1913,45 @@
                                     moveY = lootTarget.y - e.y;
                                     baseSpeed = 220;
 
-                                    if (minDist < 50) {
+                                    if (minDist < 45) {
                                         if (lootTarget.loot) {
+                                            // It's a crate
                                             lootTarget.alive = false;
                                             this.droppedItems.push({ x: lootTarget.x, y: lootTarget.y, type: lootTarget.loot, rarity: lootTarget.rarity, r: 15 });
                                             if (Math.random() < 0.1) audio.crate();
+                                            e.lootCD = 0.5; // Short pause after opening crate
                                         } else {
+                                            // It's a ground item
                                             let slot = e.inventory.indexOf(null);
+                                            if (slot === -1) {
+                                                const rarityOrder = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'];
+                                                let worstIdx = -1, worstScore = 99;
+                                                e.inventory.forEach((inv, idx) => {
+                                                    if (!inv) return;
+                                                    const s = rarityOrder.indexOf(inv.rarity);
+                                                    if (s < worstScore) { worstScore = s; worstIdx = idx; }
+                                                });
+                                                
+                                                if (worstIdx !== -1 && rarityOrder.indexOf(lootTarget.rarity) > worstScore) {
+                                                    // Drop the worst item to ground
+                                                    const wrst = e.inventory[worstIdx];
+                                                    this.droppedItems.push({ x: e.x, y: e.y, type: wrst.type, rarity: wrst.rarity, r: 15 });
+                                                    e.inventory[worstIdx] = null;
+                                                    slot = worstIdx;
+                                                }
+                                            }
+
                                             if (slot !== -1) {
                                                 e.inventory[slot] = { type: lootTarget.type, rarity: lootTarget.rarity };
                                                 const idx = this.droppedItems.indexOf(lootTarget);
                                                 if (idx !== -1) this.droppedItems.splice(idx, 1);
+                                                e.lootCD = 0.8;
+                                                moveX = 0; moveY = 0; // Only stay still if we actually picked it up
+                                            } else {
+                                                // Could not pick up, ignore this target for a bit so we don't freeze
+                                                e.lootCD = 1.5;
                                             }
                                         }
-                                        moveX = 0; moveY = 0; // Stop moveX/Y to allow pick-up
                                     }
                                 } else {
                                     // Idle Wander State
