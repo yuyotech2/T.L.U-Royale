@@ -1831,14 +1831,7 @@
                                     // Soft lock: pull angle towards target
                                     e.angle = this.lerpAngle(e.angle, angTo, 0.2);
 
-                                    // Auto-Fire: If nearly perfectly aimed, shoot!
-                                    const fireDiff = Math.abs(this.normalizeAngle(angTo - e.angle));
-                                    if (fireDiff < 0.15 && e.inventory[e.selectedSlot] && e.cd <= 0) {
-                                        const itm = e.inventory[e.selectedSlot];
-                                        e.shoot(this);
-                                        e.cd = WEAPONS[itm.type] ? WEAPONS[itm.type].cd : 2.0;
-
-                                    }
+                                    e.angle = this.lerpAngle(e.angle, angTo, 0.2);
                                 }
                             }
 
@@ -1846,8 +1839,9 @@
                                 const itm = e.inventory[e.selectedSlot];
                                 e.shoot(this);
                                 e.cd = WEAPONS[itm.type] ? WEAPONS[itm.type].cd : 2.0;
-                            } else {
-                                // --- BOT BRAIN & STEERING ---
+                            }
+                        } else {
+                            // --- BOT BRAIN & STEERING ---
                             let moveX = 0, moveY = 0;
                             let baseSpeed = 160;
                             let targetEntity = null, targetDist = 1500;
@@ -1938,7 +1932,7 @@
                             this.map.obstacles.forEach(o => {
                                 if (o.type === 'bush') return;
                                 const dx = e.x - o.x, dy = e.y - o.y;
-                                const odist = Math.sqrt(dx * dx + dy * dy);
+                                const odist = Math.sqrt(dx * dx + dy * dy) || 0.1;
                                 if (odist < o.r + e.r + 40) {
                                     const force = (1 - odist / (o.r + e.r + 40)) * 2.5;
                                     moveX += (dx / odist) * force;
@@ -1950,7 +1944,7 @@
                             this.entities.forEach(other => {
                                 if (other !== e && other.alive && other.state === 'playing') {
                                     const dx = e.x - other.x, dy = e.y - other.y;
-                                    const bdist = Math.sqrt(dx * dx + dy * dy);
+                                    const bdist = Math.sqrt(dx * dx + dy * dy) || 0.1;
                                     if (bdist < e.r + other.r + 20) {
                                         const force = (1 - bdist / (e.r + other.r + 20)) * 2;
                                         moveX += (dx / bdist) * force;
