@@ -1100,14 +1100,24 @@
                     if (!b) continue;
                     const isMedical = Math.random() < 0.35;
                     const rarity = mode === 'path-to-pro' ? 'mythic' : (isMedical ? 'common' : getRandomRarity());
-                    let lootPool = isMedical ? ['bandage', 'medkit', 'mini pot', 'big pot'] : ['smg', 'pump shotgun', 'ak-47', 'burst rifle', 'pistol', 'flame launcher'];
                     
-                    // IF rarity is high, it's likely to be a sniper, but still allows other guns
-                    if (!isMedical && (rarity === 'mythic' || rarity === 'legendary')) {
-                        if (Math.random() < 0.5) {
-                            lootPool = ['heavy sniper'];
+                    let loot = null;
+                    if (isMedical) {
+                        const medPool = ['bandage', 'medkit', 'mini pot', 'big pot'];
+                        loot = medPool[Math.floor(Math.random() * medPool.length)];
+                    } else {
+                        const standardPool = ['smg', 'pump shotgun', 'ak-47', 'burst rifle', 'pistol'];
+                        const highTierPool = ['heavy sniper', 'flame launcher'];
+                        
+                        // Restrict high power weapons to Epic+ rarity
+                        if (['mythic', 'legendary', 'epic'].includes(rarity)) {
+                            if (Math.random() < 0.4) {
+                                loot = highTierPool[Math.floor(Math.random() * highTierPool.length)];
+                            } else {
+                                loot = standardPool[Math.floor(Math.random() * standardPool.length)];
+                            }
                         } else {
-                            lootPool = ['ak-47', 'smg', 'pump shotgun'];
+                            loot = standardPool[Math.floor(Math.random() * standardPool.length)];
                         }
                     }
 
@@ -1116,7 +1126,7 @@
                         y: b.y + 30 + Math.random() * (b.h - 60),
                         hp: 50, alive: true, r: 25,
                         rarity: rarity,
-                        loot: lootPool[Math.floor(Math.random() * lootPool.length)],
+                        loot: loot,
                         type: isMedical ? 'medical' : 'weapon'
                     });
                 }
