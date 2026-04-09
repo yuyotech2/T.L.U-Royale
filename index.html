@@ -1792,34 +1792,40 @@
                         e.x += e.velX * baseSpeed * dt;
                         e.y += e.velY * baseSpeed * dt;
 
-                        // NEW: Hard Boundary Wall Collision (Applied AFTER move)
+                        // NEW: Strict Box-Clamping Wall Collision
                         this.map.buildings.forEach(b => {
-                            if (e.x > b.x - 50 && e.x < b.x + b.w + 50 && e.y > b.y - 50 && e.y < b.y + b.h + 50) {
+                            const buffer = e.r + 2;
+                            // Check if character is entering/inside the building's bounding box (+ buffer)
+                            if (e.x > b.x - buffer && e.x < b.x + b.w + buffer && e.y > b.y - buffer && e.y < b.y + b.h + buffer) {
+                                const relX = e.x - b.x;
+                                const relY = e.y - b.y;
+                                const inDoorX = relX > b.w * 0.4 && relX < b.w * 0.6;
+                                
+                                // North Wall
+                                if (relY < buffer && !inDoorX) { e.y = b.y - buffer; e.velY = 0; }
+                                // South Wall
+                                if (relY > b.h - buffer && !inDoorX) { e.y = b.y + b.h + buffer; e.velY = 0; }
+                                // West Wall
+                                if (relX < buffer) { e.x = b.x - buffer; e.velX = 0; }
+                                // East Wall
+                                if (relX > b.w - buffer) { e.x = b.x + b.w + buffer; e.velX = 0; }
+
+                                // Interior Walls (Cross pattern)
                                 const splitX = b.rooms[0].w;
                                 const splitY = b.rooms[0].h;
-                                const wallPad = e.r + 2; // Slightly tighter for better feel
-                                const projectOffSegment = (x1, y1, x2, y2) => {
-                                    const px = e.x, py = e.y;
-                                    const l2 = (x1-x2)**2 + (y1-y2)**2;
-                                    if (l2 === 0) return;
-                                    let t = Math.max(0, Math.min(1, ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2));
-                                    const projX = x1 + t * (x2 - x1), projY = y1 + t * (y2 - y1);
-                                    const dist = Math.sqrt((px - projX)**2 + (py - projY)**2) || 0.1;
-                                    if (dist < wallPad) {
-                                        const push = (wallPad - dist) + 1;
-                                        e.x += ((px - projX) / dist) * push;
-                                        e.y += ((py - projY) / dist) * push;
-                                        // Kill velocity in that direction to prevent 'vibrating' through
-                                        if (Math.abs(px - projX) > Math.abs(py - projY)) e.velX = 0; else e.velY = 0;
-                                    }
-                                };
-                                // Exterior Walls
-                                projectOffSegment(b.x, b.y, b.x+b.w*0.4, b.y); projectOffSegment(b.x+b.w*0.6, b.y, b.x+b.w, b.y);
-                                projectOffSegment(b.x, b.y+b.h, b.x+b.w*0.4, b.y+b.h); projectOffSegment(b.x+b.w*0.6, b.y+b.h, b.x+b.w, b.y+b.h);
-                                projectOffSegment(b.x, b.y, b.x, b.y+b.h); projectOffSegment(b.x+b.w, b.y, b.x+b.w, b.y+b.h);
-                                // Interior Walls
-                                projectOffSegment(b.x+splitX, b.y, b.x+splitX, b.y+splitY*0.4); projectOffSegment(b.x+splitX, b.y+splitY*0.7, b.x+splitX, b.y+b.h);
-                                projectOffSegment(b.x, b.y+splitY, b.x+splitX*0.4, b.y+splitY); projectOffSegment(b.x+splitX*0.7, b.y+splitY, b.x+b.w, b.y+splitY);
+                                const inIntDoorV = relY > splitY * 0.4 && relY < splitY * 0.7;
+                                const inIntDoorH = relX > splitX * 0.4 && relX < splitX * 0.7;
+
+                                // Vertical Internal Wall
+                                if (Math.abs(relX - splitX) < buffer && !inIntDoorV) {
+                                    e.x = (relX < splitX) ? b.x + splitX - buffer : b.x + splitX + buffer;
+                                    e.velX = 0;
+                                }
+                                // Horizontal Internal Wall
+                                if (Math.abs(relY - splitY) < buffer && !inIntDoorH) {
+                                    e.y = (relY < splitY) ? b.y + splitY - buffer : b.y + splitY + buffer;
+                                    e.velY = 0;
+                                }
                             }
                         });
                     }
