@@ -1789,240 +1789,16 @@
                         e.dropScale -= dt * 0.8;
                         if (e.dropScale <= 1) { e.dropScale = 1; e.state = 'playing'; }
                     } else if (e.state === 'playing') {
-                        let moveX = 0, moveY = 0;
-                        let baseSpeed = 160;
+                        e.x += e.velX * baseSpeed * dt;
+                        e.y += e.velY * baseSpeed * dt;
 
-                        if (e === this.player) {
-                            const kb = userData.keybinds;
-                            if (this.keys[kb.up]) moveY--; if (this.keys[kb.down]) moveY++;
-                            if (this.keys[kb.left]) moveX--; if (this.keys[kb.right]) moveX++;
-
-                            // Joystick Override
-                            if (this.joystick.active) {
-                                moveX = this.joystick.dx;
-                                moveY = this.joystick.dy;
-                            }
-
-                            if (moveX !== 0 || moveY !== 0) {
-                                if (Math.random() < 0.15) audio.walk();
-                                baseSpeed = 350;
-                            }
-
-                            // Interaction (E)
-                            if (this.keys[kb.interact]) {
-                                let acted = false;
-                                this.map.crates.forEach(c => {
-                                    if (c.alive && Math.sqrt((c.x - e.x) ** 2 + (c.y - e.y) ** 2) < 80) {
-                                        c.alive = false;
-                                        this.droppedItems.push({ x: c.x, y: c.y, type: c.loot, rarity: c.rarity, r: 15 });
-                                        audio.crate(); acted = true;
-                                    }
-                                });
-                                for (let i = this.droppedItems.length - 1; i >= 0; i--) {
-                                    const item = this.droppedItems[i];
-                                    if (Math.sqrt((item.x - e.x) ** 2 + (item.y - e.y) ** 2) < 100) {
-                                        let slot = e.inventory.indexOf(null);
-                                        if (slot !== -1) {
-                                            e.inventory[slot] = { type: item.type, rarity: item.rarity };
-                                            this.droppedItems.splice(i, 1);
-                                            this.addKillFeed(`Picked up ${item.rarity.toUpperCase()} ${item.type.toUpperCase()}`);
-                                            audio.pickup(); acted = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                                if (acted) this.keys[kb.interact] = false;
-
-                                this.supplyDrops.forEach((d, idx) => {
-                                    if (d.landed && Math.sqrt((d.x-e.x)**2 + (d.y-e.y)**2) < 80) {
-                                        this.supplyDrops.splice(idx, 1);
-                                        const type = Math.random() < 0.8 ? 'heavy sniper' : Object.keys(WEAPONS)[Math.floor(Math.random()*Object.keys(WEAPONS).length)];
-                                        const rarity = this.currentMode === 'path-to-pro' ? 'mythic' : (Math.random() < 0.3 ? 'mythic' : 'legendary'); 
-                                        this.droppedItems.push({ x: d.x, y: d.y, type, rarity, r: 15 });
-                                        audio.crate();
-                                    }
-                                });
-                            }
-
-                            // Angle & Aiming Logic
-                            if (this.joystick.active && !this.isAiming) {
-                                e.angle = Math.atan2(this.joystick.dy, this.joystick.dx);
-                            } else {
-                                e.angle = Math.atan2(this.mouse.y - this.cvs.height / 2, this.mouse.x - this.cvs.width / 2);
-                            }
-
-                            // Mobile Enhancements
-                            if (this.isTouch) {
-                                let aimTarget = null, aimDist = 600;
-                                this.entities.forEach(other => {
-                                    if (other !== e && other.alive && other.team !== e.team && other.state === 'playing') {
-                                        if (other.hidden) return;
-                                        const d = Math.sqrt((other.x - e.x) ** 2 + (other.y - e.y) ** 2);
-                                        if (d < aimDist) {
-                                            const angTo = Math.atan2(other.y - e.y, other.x - e.x);
-                                            const diff = Math.abs(this.normalizeAngle(angTo - e.angle));
-                                            if (diff < 0.6) { aimDist = d; aimTarget = other; }
-                                        }
-                                    }
-                                });
-                                if (aimTarget) {
-                                    const angTo = Math.atan2(aimTarget.y - e.y, aimTarget.x - e.x);
-                                    e.angle = this.lerpAngle(e.angle, angTo, 0.2);
-                                }
-                            }
-
-                            if (this.mouse.left && e.inventory[e.selectedSlot] && e.cd <= 0) {
-                                const itm = e.inventory[e.selectedSlot];
-                                e.shoot(this);
-                                e.cd = WEAPONS[itm.type] ? WEAPONS[itm.type].cd : 2.0;
-                            }
-                        } else {
-                            // --- BOT BRAIN & STEERING ---
-                            let targetEntity = null, targetDist = 1500;
-                            // Find nearest enemy
-                            this.entities.forEach(other => {
-                                if (other !== e && other.alive && other.team !== e.team && other.state === 'playing') {
-                                    if (other.hidden) return;
-                                    const d = Math.sqrt((other.x - e.x) ** 2 + (other.y - e.y) ** 2);
-                                    if (d < targetDist) { targetDist = d; targetEntity = other; }
-                                }
-                            });
-
-                            const hasWeapon = e.inventory.some(w => w && WEAPONS[w.type]);
-
-                            if (targetEntity && hasWeapon) {
-                                const itm = e.inventory[e.selectedSlot];
-                                if (!itm || !WEAPONS[itm.type]) {
-                                    e.selectedSlot = e.inventory.findIndex(w => w && WEAPONS[w.type]);
-                                }
-                                moveX = targetEntity.x - e.x;
-                                moveY = targetEntity.y - e.y;
-                                if (e.cd <= 0) { e.shoot(this); e.cd = WEAPONS[e.inventory[e.selectedSlot].type].cd * 1.5; }
-                            } else if (e.team === 'player_team') {
-                                // Follow Teammate State
-                                const dp = Math.sqrt((this.player.x - e.x) ** 2 + (this.player.y - e.y) ** 2);
-                                if (dp > 150) {
-                                    moveX = this.player.x - e.x;
-                                    moveY = this.player.y - e.y;
-                                    baseSpeed = 180;
-                                }
-                            } else {
-                                // Loot Search State
-                                if (e.lootCD === undefined) e.lootCD = 0;
-                                if (e.lootCD > 0) e.lootCD -= dt;
-
-                                let lootTarget = null, minDist = 800;
-                                if (e.lootCD <= 0) {
-                                    const rarityOrder = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'];
-                                    this.droppedItems.forEach(item => {
-                                        let hasSpace = e.inventory.includes(null);
-                                        let isUpgrade = false;
-                                        if (!hasSpace) {
-                                            const itemScore = rarityOrder.indexOf(item.rarity);
-                                            e.inventory.forEach(inv => {
-                                                if (inv && rarityOrder.indexOf(inv.rarity) < itemScore) isUpgrade = true;
-                                            });
-                                        }
-                                        if (hasSpace || isUpgrade) {
-                                            const dist = Math.sqrt((item.x - e.x) ** 2 + (item.y - e.y) ** 2);
-                                            if (dist < minDist) { minDist = dist; lootTarget = item; }
-                                        }
-                                    });
-                                    if (!lootTarget) {
-                                        this.map.crates.forEach(c => {
-                                            if (c.alive) {
-                                                const dist = Math.sqrt((c.x - e.x) ** 2 + (c.y - e.y) ** 2);
-                                                if (dist < minDist) { minDist = dist; lootTarget = c; }
-                                            }
-                                        });
-                                    }
-                                }
-
-                                if (lootTarget) {
-                                    moveX = lootTarget.x - e.x;
-                                    moveY = lootTarget.y - e.y;
-                                    baseSpeed = 220;
-
-                                    if (minDist < 45) {
-                                        if (lootTarget.loot) {
-                                            lootTarget.alive = false;
-                                            this.droppedItems.push({ x: lootTarget.x, y: lootTarget.y, type: lootTarget.loot, rarity: lootTarget.rarity, r: 15 });
-                                            if (Math.random() < 0.1) audio.crate();
-                                            e.lootCD = 0.5;
-                                        } else {
-                                            let slot = e.inventory.indexOf(null);
-                                            if (slot === -1) {
-                                                const rarityOrder = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'];
-                                                let worstIdx = -1, worstScore = 99;
-                                                e.inventory.forEach((inv, idx) => {
-                                                    if (!inv) return;
-                                                    const s = rarityOrder.indexOf(inv.rarity);
-                                                    if (s < worstScore) { worstScore = s; worstIdx = idx; }
-                                                });
-                                                if (worstIdx !== -1 && rarityOrder.indexOf(lootTarget.rarity) > worstScore) {
-                                                    const wrst = e.inventory[worstIdx];
-                                                    this.droppedItems.push({ x: e.x, y: e.y, type: wrst.type, rarity: wrst.rarity, r: 15 });
-                                                    e.inventory[worstIdx] = null;
-                                                    slot = worstIdx;
-                                                }
-                                            }
-                                            if (slot !== -1) {
-                                                e.inventory[slot] = { type: lootTarget.type, rarity: lootTarget.rarity };
-                                                const idx = this.droppedItems.indexOf(lootTarget);
-                                                if (idx !== -1) this.droppedItems.splice(idx, 1);
-                                                e.lootCD = 0.8;
-                                                moveX = 0; moveY = 0;
-                                            } else {
-                                                e.lootCD = 1.5;
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    // Strategic Wander State
-                                    if (!e.waypoint || Math.sqrt((e.waypoint.x - e.x) ** 2 + (e.waypoint.y - e.y) ** 2) < 50) {
-                                        const r = Math.random() * (this.map.stormRadius * 0.8);
-                                        const ang = Math.random() * Math.PI * 2;
-                                        e.waypoint = {
-                                            x: this.map.stormCenter.x + Math.cos(ang) * r,
-                                            y: this.map.stormCenter.y + Math.sin(ang) * r
-                                        };
-                                        e.waypoint.x = Math.max(100, Math.min(this.map.w - 100, e.waypoint.x));
-                                        e.waypoint.y = Math.max(100, Math.min(this.map.h - 100, e.waypoint.y));
-                                    }
-                                    moveX = e.waypoint.x - e.x;
-                                    moveY = e.waypoint.y - e.y;
-                                    baseSpeed = 120;
-                                }
-                            }
-                        }
-
-                        // Normalize & Apply Shared Collision/Movement logic
-                        const d = Math.sqrt(moveX * moveX + moveY * moveY);
-                        if (d > 0) {
-                            moveX /= d; moveY /= d;
-                        } else {
-                            moveX = 0; moveY = 0;
-                        }
-
-                        // Obstacle Repulsion (EVERYONE)
-                        this.map.obstacles.forEach(o => {
-                            if (o.type === 'bush') return;
-                            const dx = e.x - o.x, dy = e.y - o.y;
-                            const odist = Math.sqrt(dx * dx + dy * dy) || 0.1;
-                            if (odist < o.r + e.r + 40) {
-                                const force = (1 - odist / (o.r + e.r + 40)) * 2.5;
-                                moveX += (dx / odist) * force;
-                                moveY += (dy / odist) * force;
-                            }
-                        });
-
-                        // Building Wall Collisions (EVERYONE)
+                        // NEW: Hard Boundary Wall Collision (Applied AFTER move)
                         this.map.buildings.forEach(b => {
                             if (e.x > b.x - 50 && e.x < b.x + b.w + 50 && e.y > b.y - 50 && e.y < b.y + b.h + 50) {
                                 const splitX = b.rooms[0].w;
                                 const splitY = b.rooms[0].h;
-                                const wallPad = e.r + 5;
-                                const repelFromSegment = (x1, y1, x2, y2) => {
+                                const wallPad = e.r + 2; // Slightly tighter for better feel
+                                const projectOffSegment = (x1, y1, x2, y2) => {
                                     const px = e.x, py = e.y;
                                     const l2 = (x1-x2)**2 + (y1-y2)**2;
                                     if (l2 === 0) return;
@@ -2030,42 +1806,22 @@
                                     const projX = x1 + t * (x2 - x1), projY = y1 + t * (y2 - y1);
                                     const dist = Math.sqrt((px - projX)**2 + (py - projY)**2) || 0.1;
                                     if (dist < wallPad) {
-                                        const force = (1 - dist / wallPad) * 4;
-                                        moveX += ((px - projX) / dist) * force;
-                                        moveY += ((py - projY) / dist) * force;
+                                        const push = (wallPad - dist) + 1;
+                                        e.x += ((px - projX) / dist) * push;
+                                        e.y += ((py - projY) / dist) * push;
+                                        // Kill velocity in that direction to prevent 'vibrating' through
+                                        if (Math.abs(px - projX) > Math.abs(py - projY)) e.velX = 0; else e.velY = 0;
                                     }
                                 };
-                                repelFromSegment(b.x, b.y, b.x+b.w*0.4, b.y); repelFromSegment(b.x+b.w*0.6, b.y, b.x+b.w, b.y);
-                                repelFromSegment(b.x, b.y+b.h, b.x+b.w*0.4, b.y+b.h); repelFromSegment(b.x+b.w*0.6, b.y+b.h, b.x+b.w, b.y+b.h);
-                                repelFromSegment(b.x, b.y, b.x, b.y+b.h); repelFromSegment(b.x+b.w, b.y, b.x+b.w, b.y+b.h);
-                                repelFromSegment(b.x+splitX, b.y, b.x+splitX, b.y+splitY*0.4); repelFromSegment(b.x+splitX, b.y+splitY*0.7, b.x+splitX, b.y+b.h);
-                                repelFromSegment(b.x, b.y+splitY, b.x+splitX*0.4, b.y+splitY); repelFromSegment(b.x+splitX*0.7, b.y+splitY, b.x+b.w, b.y+splitY);
+                                // Exterior Walls
+                                projectOffSegment(b.x, b.y, b.x+b.w*0.4, b.y); projectOffSegment(b.x+b.w*0.6, b.y, b.x+b.w, b.y);
+                                projectOffSegment(b.x, b.y+b.h, b.x+b.w*0.4, b.y+b.h); projectOffSegment(b.x+b.w*0.6, b.y+b.h, b.x+b.w, b.y+b.h);
+                                projectOffSegment(b.x, b.y, b.x, b.y+b.h); projectOffSegment(b.x+b.w, b.y, b.x+b.w, b.y+b.h);
+                                // Interior Walls
+                                projectOffSegment(b.x+splitX, b.y, b.x+splitX, b.y+splitY*0.4); projectOffSegment(b.x+splitX, b.y+splitY*0.7, b.x+splitX, b.y+b.h);
+                                projectOffSegment(b.x, b.y+splitY, b.x+splitX*0.4, b.y+splitY); projectOffSegment(b.x+splitX*0.7, b.y+splitY, b.x+b.w, b.y+splitY);
                             }
                         });
-
-                        // Bot-Bot Repulsion
-                        this.entities.forEach(other => {
-                            if (other !== e && other.alive && other.state === 'playing') {
-                                const dx = e.x - other.x, dy = e.y - other.y;
-                                const bdist = Math.sqrt(dx * dx + dy * dy) || 0.1;
-                                if (bdist < e.r + other.r + 20) {
-                                    const force = (1 - bdist / (e.r + other.r + 20)) * 2;
-                                    moveX += (dx / bdist) * force;
-                                    moveY += (dy / bdist) * force;
-                                }
-                            }
-                        });
-
-                        // Final Physics Step
-                        const finalDist = Math.sqrt(moveX * moveX + moveY * moveY);
-                        if (finalDist > 1) { moveX /= finalDist; moveY /= finalDist; }
-                        if (e !== this.player && finalDist > 0.1) {
-                            e.angle = this.lerpAngle(e.angle, Math.atan2(moveY, moveX), 0.15);
-                        }
-                        e.velX = (e.velX || 0) * 0.85 + moveX * 0.15;
-                        e.velY = (e.velY || 0) * 0.85 + moveY * 0.15;
-                        e.x += e.velX * baseSpeed * dt;
-                        e.y += e.velY * baseSpeed * dt;
                     }
 
                         // Item Pickup (Bots and Player now separate or shared?)
@@ -2120,9 +1876,28 @@
                     const b = this.bullets[i];
                     b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
 
-                    // Wall collision
-                    // Bullets now pass through buildings to allow indoor combat.
-                    // (Old building collision removed)
+                    // NEW: Bullet-House Wall Collision
+                    this.map.buildings.forEach(house => {
+                        const distToHouse = Math.sqrt((b.x - house.x - house.w/2)**2 + (b.y - house.y - house.h/2)**2);
+                        if (distToHouse < (house.w + house.h)) { // Quick range check
+                            const splitX = house.rooms[0].w;
+                            const splitY = house.rooms[0].h;
+                            const distToSeg = (px, py, x1, y1, x2, y2) => {
+                                const l2 = (x1-x2)**2 + (y1-y2)**2;
+                                if (l2 === 0) return Math.sqrt((px-x1)**2 + (py-y1)**2);
+                                let t = Math.max(0, Math.min(1, ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2));
+                                return Math.sqrt((px - (x1 + t*(x2-x1)))**2 + (py - (y1+t*(y2-y1)))**2);
+                            };
+                            const segments = [
+                                [house.x, house.y, house.x+house.w*0.4, house.y], [house.x+house.w*0.6, house.y, house.x+house.w, house.y],
+                                [house.x, house.y+house.h, house.x+house.w*0.4, house.y+house.h], [house.x+house.w*0.6, house.y+house.h, house.x+house.w, house.y+house.h],
+                                [house.x, house.y, house.x, house.y+house.h], [house.x+house.w, house.y, house.x+house.w, house.y+house.h],
+                                [house.x+splitX, house.y, house.x+splitX, house.y+splitY*0.4], [house.x+splitX, house.y+splitY*0.7, house.x+splitX, house.y+house.h],
+                                [house.x, house.y+splitY, house.x+splitX*0.4, house.y+splitY], [house.x+splitX*0.7, house.y+splitY, house.x+house.w, house.y+splitY]
+                            ];
+                            segments.forEach(s => { if (distToSeg(b.x, b.y, s[0], s[1], s[2], s[3]) < 12) b.life = 0; });
+                        }
+                    });
 
                     this.entities.forEach(ent => {
                         if (ent.alive && ent.state === 'playing' && ent !== b.owner && ent.team !== b.owner.team && Math.sqrt((b.x - ent.x) ** 2 + (b.y - ent.y) ** 2) < ent.r) {
