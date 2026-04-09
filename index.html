@@ -765,68 +765,7 @@
         <canvas id="game-canvas"></canvas>
     </div>
 
-    <!-- Fresh Salad Bowls Section -->
-    <section id="salads" class="menu-sections">
-        <div class="container">
-            <h2 class="section-title">Fresh Salad Bowls</h2>
-            <div class="menu-grid">
-                <!-- Salad Card 1 -->
-                <div class="salad-card">
-                    <div class="salad-image-container">
-                        <img src="https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&auto=format&fit=crop&q=60" alt="Gourmet Salad Bowl" class="salad-image">
-                        <div class="calories-badge">380 kcal</div>
-                    </div>
-                    <div class="salad-content">
-                        <div class="salad-header">
-                            <h3 class="salad-title">Gourmet Garden Bowl</h3>
-                            <span class="salad-price">$12.99</span>
-                        </div>
-                        <p class="salad-description">A vibrant mix of field greens, roasted beetroots, goat cheese, toasted walnuts, and honey-lemon dressing.</p>
-                        <div class="salad-footer">
-                            <div class="dietary-tags">
-                                <span class="dietary-tag">Vegetarian</span>
-                                <span class="dietary-tag">Healthy</span>
-                            </div>
-                            <button class="add-btn">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                                </svg>
-                                Add
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                <!-- Salad Card 2 -->
-                <div class="salad-card">
-                    <div class="salad-image-container">
-                        <img src="https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&auto=format&fit=crop&q=60" alt="Harvest Grain Bowl" class="salad-image">
-                        <div class="calories-badge">420 kcal</div>
-                    </div>
-                    <div class="salad-content">
-                        <div class="salad-header">
-                            <h3 class="salad-title">Harvest Grain Bowl</h3>
-                            <span class="salad-price">$13.50</span>
-                        </div>
-                        <p class="salad-description">Warm quinoa, roasted sweet potatoes, kale, toasted pumpkin seeds, and a maple-balsamic glaze.</p>
-                        <div class="salad-footer">
-                            <div class="dietary-tags">
-                                <span class="dietary-tag">Vegan</span>
-                                <span class="dietary-tag">Gluten Free</span>
-                            </div>
-                            <button class="add-btn">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                                </svg>
-                                Add
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
+    </div>
 
     <script>
         // --- DATA PERSISTENCE ---
@@ -1788,40 +1727,161 @@
 
                         e.dropScale -= dt * 0.8;
                         if (e.dropScale <= 1) { e.dropScale = 1; e.state = 'playing'; }
-                    } else if (e.state === 'playing') {
+                        let moveX = 0, moveY = 0;
+                        let baseSpeed = 160;
+
+                        if (e === this.player) {
+                            const kb = userData.keybinds;
+                            if (this.keys[kb.up]) moveY--; if (this.keys[kb.down]) moveY++;
+                            if (this.keys[kb.left]) moveX--; if (this.keys[kb.right]) moveX++;
+
+                            if (this.joystick.active) {
+                                moveX = this.joystick.dx; moveY = this.joystick.dy;
+                            }
+
+                            if (moveX !== 0 || moveY !== 0) {
+                                if (Math.random() < 0.15) audio.walk();
+                                baseSpeed = 350;
+                            }
+
+                            // Interaction (E)
+                            if (this.keys[kb.interact]) {
+                                let acted = false;
+                                this.map.crates.forEach(c => {
+                                    if (c.alive && Math.sqrt((c.x - e.x) ** 2 + (c.y - e.y) ** 2) < 80) {
+                                        c.alive = false;
+                                        this.droppedItems.push({ x: c.x, y: c.y, type: c.loot, rarity: c.rarity, r: 15 });
+                                        audio.crate(); acted = true;
+                                    }
+                                });
+                                for (let i = this.droppedItems.length - 1; i >= 0; i--) {
+                                    const item = this.droppedItems[i];
+                                    if (Math.sqrt((item.x - e.x) ** 2 + (item.y - e.y) ** 2) < 100) {
+                                        let slot = e.inventory.indexOf(null);
+                                        if (slot !== -1) {
+                                            e.inventory[slot] = { type: item.type, rarity: item.rarity };
+                                            this.droppedItems.splice(i, 1);
+                                            this.addKillFeed(`Picked up ${item.rarity.toUpperCase()} ${item.type.toUpperCase()}`);
+                                            audio.pickup(); acted = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (acted) this.keys[kb.interact] = false;
+
+                                this.supplyDrops.forEach((d, idx) => {
+                                    if (d.landed && Math.sqrt((d.x - e.x) ** 2 + (d.y - e.y) ** 2) < 80) {
+                                        this.supplyDrops.splice(idx, 1);
+                                        const type = Math.random() < 0.8 ? 'heavy sniper' : Object.keys(WEAPONS)[Math.floor(Math.random() * Object.keys(WEAPONS).length)];
+                                        const rarity = this.currentMode === 'path-to-pro' ? 'mythic' : (Math.random() < 0.3 ? 'mythic' : 'legendary');
+                                        this.droppedItems.push({ x: d.x, y: d.y, type, rarity, r: 15 });
+                                        audio.crate();
+                                    }
+                                });
+                            }
+
+                            // Interaction (Q)
+                            if (this.keys[kb.weapon_drop]) {
+                                this.dropWeapon(e);
+                                this.keys[kb.weapon_drop] = false;
+                            }
+
+                            // Angle & Aiming
+                            if (this.joystick.active && !this.isAiming) {
+                                e.angle = Math.atan2(this.joystick.dy, this.joystick.dx);
+                            } else {
+                                e.angle = Math.atan2(this.mouse.y - this.cvs.height / 2, this.mouse.x - this.cvs.width / 2);
+                            }
+
+                            if (this.mouse.left && e.inventory[e.selectedSlot] && e.cd <= 0) {
+                                e.shoot(this);
+                                const itm = e.inventory[e.selectedSlot];
+                                e.cd = WEAPONS[itm.type] ? WEAPONS[itm.type].cd : 2.0;
+                            }
+                        } else {
+                            // --- BOT BRAIN ---
+                            let targetEntity = null, targetDist = 1500;
+                            this.entities.forEach(other => {
+                                if (other !== e && other.alive && other.team !== e.team && other.state === 'playing' && !other.hidden) {
+                                    const d = Math.sqrt((other.x - e.x) ** 2 + (other.y - e.y) ** 2);
+                                    if (d < targetDist) { targetDist = d; targetEntity = other; }
+                                }
+                            });
+
+                            const hasWeapon = e.inventory.some(w => w && WEAPONS[w.type]);
+                            if (targetEntity && hasWeapon) {
+                                moveX = targetEntity.x - e.x; moveY = targetEntity.y - e.y;
+                                e.angle = Math.atan2(moveY, moveX);
+                                if (e.cd <= 0) { e.shoot(this); e.cd = WEAPONS[e.inventory[e.selectedSlot].type].cd * 1.5; }
+                            } else {
+                                // Loot Search or Wander
+                                if (e.lootCD === undefined) e.lootCD = 0; if (e.lootCD > 0) e.lootCD -= dt;
+                                let lootTarget = null, minDist = 800;
+                                if (e.lootCD <= 0) {
+                                    const rarityOrder = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'];
+                                    this.droppedItems.forEach(item => {
+                                        const dist = Math.sqrt((item.x - e.x) ** 2 + (item.y - e.y) ** 2);
+                                        if (dist < minDist) { minDist = dist; lootTarget = item; }
+                                    });
+                                }
+                                if (lootTarget) {
+                                    moveX = lootTarget.x - e.x; moveY = lootTarget.y - e.y; baseSpeed = 220;
+                                    if (minDist < 45) { // Pickup logic
+                                        let slot = e.inventory.indexOf(null);
+                                        if (slot !== -1) {
+                                            e.inventory[slot] = { type: lootTarget.type, rarity: lootTarget.rarity };
+                                            this.droppedItems.splice(this.droppedItems.indexOf(lootTarget), 1);
+                                            e.lootCD = 0.8;
+                                        }
+                                    }
+                                } else {
+                                    // Wander
+                                    if (!e.waypoint || Math.sqrt((e.waypoint.x - e.x) ** 2 + (e.waypoint.y - e.y) ** 2) < 50) {
+                                        e.waypoint = { x: Math.random() * this.map.w, y: Math.random() * this.map.h };
+                                    }
+                                    moveX = e.waypoint.x - e.x; moveY = e.waypoint.y - e.y; baseSpeed = 120;
+                                }
+                            }
+                        }
+
+                        // Shared Collision Handling
+                        const d = Math.sqrt(moveX * moveX + moveY * moveY);
+                        if (d > 0) { moveX /= d; moveY /= d; }
+                        
+                        // Small obstacle repulsion
+                        this.map.obstacles.forEach(o => {
+                            if (o.type === 'bush') return;
+                            const dx = e.x - o.x, dy = e.y - o.y;
+                            const odist = Math.sqrt(dx * dx + dy * dy);
+                            if (odist < o.r + e.r + 20) {
+                                moveX += (dx / odist) * 2;
+                                moveY += (dy / odist) * 2;
+                            }
+                        });
+
+
+                        e.velX = (e.velX || 0) * 0.85 + moveX * 0.15;
+                        e.velY = (e.velY || 0) * 0.85 + moveY * 0.15;
                         e.x += e.velX * baseSpeed * dt;
                         e.y += e.velY * baseSpeed * dt;
 
                         // NEW: Strict Box-Clamping Wall Collision
                         this.map.buildings.forEach(b => {
                             const buffer = e.r + 2;
-                            // Check if character is entering/inside the building's bounding box (+ buffer)
                             if (e.x > b.x - buffer && e.x < b.x + b.w + buffer && e.y > b.y - buffer && e.y < b.y + b.h + buffer) {
-                                const relX = e.x - b.x;
-                                const relY = e.y - b.y;
+                                const relX = e.x - b.x, relY = e.y - b.y;
                                 const inDoorX = relX > b.w * 0.4 && relX < b.w * 0.6;
-                                
-                                // North Wall
                                 if (relY < buffer && !inDoorX) { e.y = b.y - buffer; e.velY = 0; }
-                                // South Wall
                                 if (relY > b.h - buffer && !inDoorX) { e.y = b.y + b.h + buffer; e.velY = 0; }
-                                // West Wall
                                 if (relX < buffer) { e.x = b.x - buffer; e.velX = 0; }
-                                // East Wall
                                 if (relX > b.w - buffer) { e.x = b.x + b.w + buffer; e.velX = 0; }
-
-                                // Interior Walls (Cross pattern)
-                                const splitX = b.rooms[0].w;
-                                const splitY = b.rooms[0].h;
+                                const splitX = b.rooms[0].w, splitY = b.rooms[0].h;
                                 const inIntDoorV = relY > splitY * 0.4 && relY < splitY * 0.7;
                                 const inIntDoorH = relX > splitX * 0.4 && relX < splitX * 0.7;
-
-                                // Vertical Internal Wall
                                 if (Math.abs(relX - splitX) < buffer && !inIntDoorV) {
                                     e.x = (relX < splitX) ? b.x + splitX - buffer : b.x + splitX + buffer;
                                     e.velX = 0;
                                 }
-                                // Horizontal Internal Wall
                                 if (Math.abs(relY - splitY) < buffer && !inIntDoorH) {
                                     e.y = (relY < splitY) ? b.y + splitY - buffer : b.y + splitY + buffer;
                                     e.velY = 0;
