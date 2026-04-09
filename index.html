@@ -937,7 +937,7 @@
             { id: 'white', color: '#ffffff', name: 'Ghost' }
         ];
 
-        const MAP_SIZE = 6000;
+        const MAP_SIZE = 7500;
         const BOT_NAMES = ["Ninja", "Default_Dan", "Sweaty_Steve", "BushCamper", "Tofu", "LootGoblin", "ZombsKiller", "RoyaleKing", "TrisaLover", "PrimeGamer", "Bot_99", "NoobMaster69", "ThePro", "Ghost", "Stark", "Viper", "BulletProof", "SniperElite", "ShadowWalk", "Blaze"];
 
         function saveGame() { localStorage.setItem(SAVE_KEY, JSON.stringify(userData)); }
@@ -991,11 +991,11 @@
         };
 
         const POIS = [
-            { name: "Prominence Peak", x: 1000, y: 1000 },
-            { name: "Trisa's Terraces", x: 5000, y: 1000 },
-            { name: "Prime Plaza", x: 3000, y: 3000 },
-            { name: "Battle Bayou", x: 1000, y: 5000 },
-            { name: "Royale Ridge", x: 5000, y: 5000 }
+            { name: "Prominence Peak", x: 1200, y: 1200 },
+            { name: "Trisa's Terraces", x: 6300, y: 1200 },
+            { name: "Prime Plaza", x: 3750, y: 3750 },
+            { name: "Battle Bayou", x: 1200, y: 6300 },
+            { name: "Royale Ridge", x: 6300, y: 6300 }
         ];
 
         function getRandomRarity() {
@@ -1083,15 +1083,30 @@
 
                 // Obstacles
                 for (let i = 0; i < treeCount; i++) this.obstacles.push({ x: Math.random() * w, y: Math.random() * h, type: Math.random() > 0.3 ? 'tree' : 'bush', r: 35 + Math.random() * 30 });
-                // Buildings (Platforms)
-                const totalBuildings = Math.floor(buildCount * 1.2); // Slightly more buildings
+                // Houses (Buildings)
+                const totalBuildings = Math.floor(buildCount * 1.5); // More houses for the bigger map
                 for (let i = 0; i < totalBuildings; i++) {
-                    const type = Math.random() > 0.5 ? 'stone' : 'wood';
+                    const isStone = Math.random() > 0.5;
+                    const bw = 400 + Math.random() * 400;
+                    const bh = 400 + Math.random() * 400;
+                    const bx = Math.random() * (w - bw - 400) + 200;
+                    const by = Math.random() * (h - bh - 400) + 200;
+                    
+                    // Simple room division
+                    const rooms = [];
+                    const splitX = bw * (0.3 + Math.random() * 0.4);
+                    const splitY = bh * (0.3 + Math.random() * 0.4);
+                    
+                    rooms.push({ x: 0, y: 0, w: splitX, h: splitY }); // Top Left
+                    rooms.push({ x: splitX, y: 0, w: bw - splitX, h: splitY }); // Top Right
+                    rooms.push({ x: 0, y: splitY, w: splitX, h: bh - splitY }); // Bottom Left
+                    rooms.push({ x: splitX, y: splitY, w: bw - splitX, h: bh - splitY }); // Bottom Right
+
                     this.buildings.push({
-                        x: Math.random() * (w - 600) + 300, y: Math.random() * (h - 600) + 300,
-                        w: 250 + Math.random() * 300, h: 250 + Math.random() * 300,
-                        color: type === 'stone' ? '#4b5563' : '#92400e', // Vibrancy up for wood
-                        type: type
+                        x: bx, y: by, w: bw, h: bh,
+                        color: isStone ? '#4b5563' : '#92400e',
+                        type: isStone ? 'stone' : 'wood',
+                        rooms: rooms
                     });
                 }
                 // Crates
@@ -1144,35 +1159,70 @@
                     for (let y = 0; y < this.h; y += 100) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(this.w, y); ctx.stroke(); }
                 }
 
-                // Buildings (Platforms)
+                // Houses (Buildings)
                 this.buildings.forEach(b => {
+                    // Draw Floor
                     ctx.fillStyle = b.color;
                     ctx.fillRect(b.x, b.y, b.w, b.h);
 
-                    if (!isMinimap && b.type === 'wood') {
-                        // Plank details for wooden platforms
-                        ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+                    if (!isMinimap) {
+                        // Interior Floor Details
+                        ctx.strokeStyle = 'rgba(0,0,0,0.1)';
                         ctx.lineWidth = 1;
-                        for (let lx = 20; lx < b.w; lx += 40) {
-                            ctx.beginPath();
-                            ctx.moveTo(b.x + lx, b.y);
-                            ctx.lineTo(b.x + lx, b.y + b.h);
-                            ctx.stroke();
-                        }
-                    } else if (!isMinimap && b.type === 'stone') {
-                        // Stone tile details
-                        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-                        ctx.lineWidth = 1;
-                        for (let lx = 40; lx < b.w; lx += 80) {
-                            for (let ly = 40; ly < b.h; ly += 80) {
-                                ctx.strokeRect(b.x + lx - 40, b.y + ly - 40, 80, 80);
+                        if (b.type === 'wood') {
+                            for (let lx = 20; lx < b.w; lx += 40) {
+                                ctx.beginPath(); ctx.moveTo(b.x + lx, b.y); ctx.lineTo(b.x + lx, b.y + b.h); ctx.stroke();
+                            }
+                        } else {
+                            for (let lx = 40; lx < b.w; lx += 80) {
+                                for (let ly = 40; ly < b.h; ly += 80) {
+                                    ctx.strokeRect(b.x + lx - 40, b.y + ly - 40, 80, 80);
+                                }
                             }
                         }
-                    }
 
-                    ctx.strokeStyle = b.type === 'wood' ? '#451a03' : '#1f2937';
-                    ctx.lineWidth = isMinimap ? 1 : 4;
-                    ctx.strokeRect(b.x, b.y, b.w, b.h);
+                        // Draw Room Walls
+                        ctx.strokeStyle = '#1f2937';
+                        ctx.lineWidth = 8;
+                        b.rooms.forEach(room => {
+                            const rx = b.x + room.x;
+                            const ry = b.y + room.y;
+                            // Draw room borders (except if they are duplicate internal walls)
+                            // For simplicity, just draw internal cross
+                        });
+
+                        // Draw main internal cross walls with door gaps
+                        const splitX = b.rooms[0].w;
+                        const splitY = b.rooms[0].h;
+
+                        ctx.beginPath();
+                        // Vertical internal wall
+                        ctx.moveTo(b.x + splitX, b.y);
+                        ctx.lineTo(b.x + splitX, b.y + splitY * 0.4);
+                        ctx.moveTo(b.x + splitX, b.y + splitY * 0.7);
+                        ctx.lineTo(b.x + splitX, b.y + b.h - (b.h-splitY)*0.3);
+                        ctx.stroke();
+
+                        // Horizontal internal wall
+                        ctx.beginPath();
+                        ctx.moveTo(b.x, b.y + splitY);
+                        ctx.lineTo(b.x + splitX * 0.4, b.y + splitY);
+                        ctx.moveTo(b.x + splitX * 0.7, b.y + splitY);
+                        ctx.lineTo(b.x + b.w, b.y + splitY);
+                        ctx.stroke();
+
+                        // Exterior Walls
+                        ctx.strokeStyle = '#111827';
+                        ctx.lineWidth = 12;
+                        // North
+                        ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x + b.w * 0.4, b.y); ctx.moveTo(b.x + b.w * 0.6, b.y); ctx.lineTo(b.x + b.w, b.y); ctx.stroke();
+                        // South
+                        ctx.beginPath(); ctx.moveTo(b.x, b.y + b.h); ctx.lineTo(b.x + b.w * 0.4, b.y + b.h); ctx.moveTo(b.x + b.w * 0.6, b.y + b.h); ctx.lineTo(b.x + b.w, b.y+b.h); ctx.stroke();
+                        // West
+                        ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x, b.y + b.h); ctx.stroke();
+                        // East
+                        ctx.beginPath(); ctx.moveTo(b.x + b.w, b.y); ctx.lineTo(b.x + b.w, b.y + b.h); ctx.stroke();
+                    }
                 });
 
                 this.obstacles.forEach(o => {
@@ -1534,7 +1584,7 @@
                 let curMapSize = MAP_SIZE;
                 let totalTargetCount = 40;
                 if (mode === 'path-to-pro') {
-                    curMapSize = 15000;
+                    curMapSize = 18000;
                     totalTargetCount = 100;
                 }
 
@@ -1954,12 +2004,23 @@
                                         }
                                     }
                                 } else {
-                                    // Idle Wander State
-                                    if (Math.random() < 0.02) e.idleAngle = (Math.random() * Math.PI * 2);
-                                    if (e.idleAngle === undefined) e.idleAngle = e.angle;
-                                    moveX = Math.cos(e.idleAngle);
-                                    moveY = Math.sin(e.idleAngle);
-                                    baseSpeed = 100;
+                                    // Strategic Wander State (Waypoint-based)
+                                    if (!e.waypoint || Math.sqrt((e.waypoint.x - e.x) ** 2 + (e.waypoint.y - e.y) ** 2) < 50) {
+                                        // Pick a new waypoint inside the safe zone (storm)
+                                        const r = Math.random() * (this.map.stormRadius * 0.8);
+                                        const ang = Math.random() * Math.PI * 2;
+                                        e.waypoint = {
+                                            x: this.map.stormCenter.x + Math.cos(ang) * r,
+                                            y: this.map.stormCenter.y + Math.sin(ang) * r
+                                        };
+                                        // Clamp to map bounds
+                                        e.waypoint.x = Math.max(100, Math.min(this.map.w - 100, e.waypoint.x));
+                                        e.waypoint.y = Math.max(100, Math.min(this.map.h - 100, e.waypoint.y));
+                                    }
+
+                                    moveX = e.waypoint.x - e.x;
+                                    moveY = e.waypoint.y - e.y;
+                                    baseSpeed = 120;
                                 }
                             }
 
@@ -1980,6 +2041,53 @@
                                     const force = (1 - odist / (o.r + e.r + 40)) * 2.5;
                                     moveX += (dx / odist) * force;
                                     moveY += (dy / odist) * force;
+                                }
+                            });
+
+                            // Add Building Wall Collisions
+                            this.map.buildings.forEach(b => {
+                                // Simple bounding box check first to save perf
+                                if (e.x > b.x - 50 && e.x < b.x + b.w + 50 && e.y > b.y - 50 && e.y < b.y + b.h + 50) {
+                                    const splitX = b.rooms[0].w;
+                                    const splitY = b.rooms[0].h;
+                                    const wallPad = e.r + 5;
+
+                                    // Function to repel from a line segment if we are a 'point' (circle)
+                                    const repelFromSegment = (x1, y1, x2, y2) => {
+                                        // Simple approximation: if near segment, push away
+                                        const px = e.x, py = e.y;
+                                        const l2 = (x1-x2)**2 + (y1-y2)**2;
+                                        if (l2 === 0) return;
+                                        let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+                                        t = Math.max(0, Math.min(1, t));
+                                        const projX = x1 + t * (x2 - x1);
+                                        const projY = y1 + t * (y2 - y1);
+                                        const dist = Math.sqrt((px - projX)**2 + (py - projY)**2) || 0.1;
+                                        if (dist < wallPad) {
+                                            const force = (1 - dist / wallPad) * 4;
+                                            moveX += ((px - projX) / dist) * force;
+                                            moveY += ((py - projY) / dist) * force;
+                                        }
+                                    };
+
+                                    // Exterior Walls (with door gaps matched to Draw logic)
+                                    // North
+                                    repelFromSegment(b.x, b.y, b.x + b.w * 0.4, b.y);
+                                    repelFromSegment(b.x + b.w * 0.6, b.y, b.x + b.w, b.y);
+                                    // South
+                                    repelFromSegment(b.x, b.y + b.h, b.x + b.w * 0.4, b.y + b.h);
+                                    repelFromSegment(b.x + b.w * 0.6, b.y + b.h, b.x + b.w, b.y + b.h);
+                                    // West & East
+                                    repelFromSegment(b.x, b.y, b.x, b.y + b.h);
+                                    repelFromSegment(b.x + b.w, b.y, b.x + b.w, b.y + b.h);
+
+                                    // Internal Walls (matched to Draw logic)
+                                    // Vertical internal
+                                    repelFromSegment(b.x + splitX, b.y, b.x + splitX, b.y + splitY * 0.4);
+                                    repelFromSegment(b.x + splitX, b.y + splitY * 0.7, b.x + splitX, b.y + b.h);
+                                    // Horizontal internal
+                                    repelFromSegment(b.x, b.y + splitY, b.x + splitX * 0.4, b.y + splitY);
+                                    repelFromSegment(b.x + splitX * 0.7, b.y + splitY, b.x + b.w, b.y + splitY);
                                 }
                             });
 
