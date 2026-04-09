@@ -1727,6 +1727,7 @@
 
                         e.dropScale -= dt * 0.8;
                         if (e.dropScale <= 1) { e.dropScale = 1; e.state = 'playing'; }
+                    } else if (e.state === 'playing') {
                         let moveX = 0, moveY = 0;
                         let baseSpeed = 160;
 
