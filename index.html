@@ -1847,42 +1847,41 @@
                                 e.shoot(this);
                                 e.cd = WEAPONS[itm.type] ? WEAPONS[itm.type].cd : 2.0;
                             }
-                        } else {
-                            // Bots can now freely enter buildings to loot crates.
-                            // Removed old collision logic to prevent spinning.
-                            // Enhanced Bot Life - Fights anyone nearby
+                            // --- BOT BRAIN & STEERING ---
+                            let moveX = 0, moveY = 0;
+                            let baseSpeed = 160;
                             let targetEntity = null, targetDist = 1500;
+
+                            // Find nearest enemy
                             this.entities.forEach(other => {
-                                if (other !== e && other.alive && other.team !== e.team && (other.state === 'playing' || other.state === 'dropping')) {
-                                    if (other.hidden) return; // Bots can't see hidden targets
+                                if (other !== e && other.alive && other.team !== e.team && other.state === 'playing') {
+                                    if (other.hidden) return;
                                     const d = Math.sqrt((other.x - e.x) ** 2 + (other.y - e.y) ** 2);
                                     if (d < targetDist) { targetDist = d; targetEntity = other; }
                                 }
                             });
-                            // --- NEW VECTOR-BASED BOT STEERING ---
-                            let targetX = e.x, targetY = e.y;
-                            let hasTarget = false;
-                            let baseSpeed = 160;
 
-                            if (targetEntity && e.inventory[e.selectedSlot]) {
+                            const hasWeapon = e.inventory.some(w => w && WEAPONS[w.type]);
+
+                            if (targetEntity && hasWeapon) {
+                                // Combat State
                                 const itm = e.inventory[e.selectedSlot];
-                                if (WEAPONS[itm.type]) {
-                                    targetX = targetEntity.x; targetY = targetEntity.y;
-                                    hasTarget = true;
-                                    if (e.cd <= 0) { e.shoot(this); e.cd = WEAPONS[itm.type].cd * 1.5; }
-                                    baseSpeed = 160;
-                                } else {
-                                    let weaponSlot = e.inventory.findIndex(w => w && WEAPONS[w.type]);
-                                    if (weaponSlot !== -1) e.selectedSlot = weaponSlot;
+                                if (!itm || !WEAPONS[itm.type]) {
+                                    e.selectedSlot = e.inventory.findIndex(w => w && WEAPONS[w.type]);
                                 }
+                                moveX = targetEntity.x - e.x;
+                                moveY = targetEntity.y - e.y;
+                                if (e.cd <= 0) { e.shoot(this); e.cd = WEAPONS[e.inventory[e.selectedSlot].type].cd * 1.5; }
                             } else if (e.team === 'player_team') {
+                                // Follow Teammate State
                                 const dp = Math.sqrt((this.player.x - e.x) ** 2 + (this.player.y - e.y) ** 2);
                                 if (dp > 150) {
-                                    targetX = this.player.x; targetY = this.player.y;
-                                    hasTarget = true;
+                                    moveX = this.player.x - e.x;
+                                    moveY = this.player.y - e.y;
                                     baseSpeed = 180;
                                 }
                             } else {
+                                // Loot Search State
                                 let lootTarget = null, minDist = 800;
                                 this.droppedItems.forEach(item => {
                                     const dist = Math.sqrt((item.x - e.x) ** 2 + (item.y - e.y) ** 2);
@@ -1898,19 +1897,11 @@
                                 }
 
                                 if (lootTarget) {
-                                    targetX = lootTarget.x; targetY = lootTarget.y;
-                                    hasTarget = true;
+                                    moveX = lootTarget.x - e.x;
+                                    moveY = lootTarget.y - e.y;
                                     baseSpeed = 220;
-                                    
-                                    if (e.hp < 75 || e.shield < 50) {
-                                        let healSlot = e.inventory.findIndex(w => w && CONSUMABLES[w.type]);
-                                        if (healSlot !== -1) {
-                                            e.selectedSlot = healSlot;
-                                            if (e.cd <= 0) e.shoot(this);
-                                        }
-                                    }
 
-                                    if (minDist < 55) {
+                                    if (minDist < 50) {
                                         if (lootTarget.loot) {
                                             lootTarget.alive = false;
                                             this.droppedItems.push({ x: lootTarget.x, y: lootTarget.y, type: lootTarget.loot, rarity: lootTarget.rarity, r: 15 });
@@ -1921,57 +1912,67 @@
                                                 e.inventory[slot] = { type: lootTarget.type, rarity: lootTarget.rarity };
                                                 const idx = this.droppedItems.indexOf(lootTarget);
                                                 if (idx !== -1) this.droppedItems.splice(idx, 1);
-                                            } else {
-                                                e.x += (Math.random()-0.5)*50 * dt; e.y += (Math.random()-0.5)*50 * dt;
                                             }
                                         }
-                                        hasTarget = false; // Stop moving if at loot
+                                        moveX = 0; moveY = 0; // Stop moveX/Y to allow pick-up
                                     }
                                 } else {
-                                    // Idle Wander
-                                    if (Math.random() < 0.02) e.angle += (Math.random() - 0.5) * 2;
-                                    e.x += Math.cos(e.angle) * 120 * dt; e.y += Math.sin(e.angle) * 120 * dt;
+                                    // Idle Wander State
+                                    if (Math.random() < 0.02) e.idleAngle = (Math.random() * Math.PI * 2);
+                                    if (e.idleAngle === undefined) e.idleAngle = e.angle;
+                                    moveX = Math.cos(e.idleAngle);
+                                    moveY = Math.sin(e.idleAngle);
+                                    baseSpeed = 100;
                                 }
                             }
 
-                            if (hasTarget) {
-                                let moveX = targetX - e.x, moveY = targetY - e.y;
-                                let dist = Math.sqrt(moveX*moveX + moveY*moveY);
-                                moveX /= dist; moveY /= dist; // Normalize
-
-                                // Add Obstacle Repulsion
-                                this.map.obstacles.forEach(o => {
-                                    if (o.type === 'bush') return;
-                                    const dx = e.x - o.x, dy = e.y - o.y;
-                                    const d = Math.sqrt(dx*dx + dy*dy);
-                                    if (d < o.r + e.r + 40) {
-                                        const force = (1 - d/(o.r + e.r + 40)) * 2;
-                                        moveX += (dx/d) * force; moveY += (dy/d) * force;
-                                    }
-                                });
-
-                                // Add Bot Repulsion
-                                this.entities.forEach(other => {
-                                    if (other !== e && other.alive && other.state === 'playing') {
-                                        const dx = e.x - other.x, dy = e.y - other.y;
-                                        const d = Math.sqrt(dx*dx + dy*dy);
-                                        if (d < e.r + other.r + 10) {
-                                            const force = (1 - d/(e.r + other.r + 10)) * 1.5;
-                                            moveX += (dx/d) * force; moveY += (dy/d) * force;
-                                        }
-                                    }
-                                });
-
-                                e.angle = Math.atan2(moveY, moveX);
-                                // Smoothing the movement to prevent "tweaking"
-                                e.velX = (e.velX || 0) * 0.8 + moveX * 0.2;
-                                e.velY = (e.velY || 0) * 0.8 + moveY * 0.2;
-                                
-                                e.x += e.velX * baseSpeed * dt;
-                                e.y += e.velY * baseSpeed * dt;
+                            // Normalize Desired Velocity
+                            const d = Math.sqrt(moveX * moveX + moveY * moveY);
+                            if (d > 0) {
+                                moveX /= d; moveY /= d;
                             } else {
-                                e.velX = 0; e.velY = 0;
+                                moveX = 0; moveY = 0;
                             }
+
+                            // Add Obstacle Repulsion
+                            this.map.obstacles.forEach(o => {
+                                if (o.type === 'bush') return;
+                                const dx = e.x - o.x, dy = e.y - o.y;
+                                const odist = Math.sqrt(dx * dx + dy * dy);
+                                if (odist < o.r + e.r + 40) {
+                                    const force = (1 - odist / (o.r + e.r + 40)) * 2.5;
+                                    moveX += (dx / odist) * force;
+                                    moveY += (dy / odist) * force;
+                                }
+                            });
+
+                            // Add Bot Collision Avoidance
+                            this.entities.forEach(other => {
+                                if (other !== e && other.alive && other.state === 'playing') {
+                                    const dx = e.x - other.x, dy = e.y - other.y;
+                                    const bdist = Math.sqrt(dx * dx + dy * dy);
+                                    if (bdist < e.r + other.r + 20) {
+                                        const force = (1 - bdist / (e.r + other.r + 20)) * 2;
+                                        moveX += (dx / bdist) * force;
+                                        moveY += (dy / bdist) * force;
+                                    }
+                                }
+                            });
+
+                            // Final Smoothing & Application
+                            const finalDist = Math.sqrt(moveX * moveX + moveY * moveY);
+                            if (finalDist > 1) { moveX /= finalDist; moveY /= finalDist; }
+                            
+                            if (finalDist > 0.1) {
+                                const targetAng = Math.atan2(moveY, moveX);
+                                e.angle = this.lerpAngle(e.angle, targetAng, 0.15);
+                            }
+
+                            e.velX = (e.velX || 0) * 0.85 + moveX * 0.15;
+                            e.velY = (e.velY || 0) * 0.85 + moveY * 0.15;
+
+                            e.x += e.velX * baseSpeed * dt;
+                            e.y += e.velY * baseSpeed * dt;
                         }
 
                         // Item Pickup (Bots and Player now separate or shared?)
