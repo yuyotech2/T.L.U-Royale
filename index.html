@@ -1111,7 +1111,7 @@
                         
                         // Restrict high power weapons to Epic+ rarity
                         if (['mythic', 'legendary', 'epic'].includes(rarity)) {
-                            if (Math.random() < 0.4) {
+                            if (Math.random() < 0.2) {
                                 loot = highTierPool[Math.floor(Math.random() * highTierPool.length)];
                             } else {
                                 loot = standardPool[Math.floor(Math.random() * standardPool.length)];
