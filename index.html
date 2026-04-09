@@ -1867,24 +1867,24 @@
                         e.y += e.velY * baseSpeed * dt;
 
                         // NEW: Strict Box-Clamping Wall Collision
-                        this.map.buildings.forEach(b => {
+                        this.map.buildings.forEach(houseObj => {
                             const buffer = e.r + 2;
-                            if (e.x > b.x - buffer && e.x < b.x + b.w + buffer && e.y > b.y - buffer && e.y < b.y + b.h + buffer) {
-                                const relX = e.x - b.x, relY = e.y - b.y;
-                                const inDoorX = relX > b.w * 0.4 && relX < b.w * 0.6;
-                                if (relY < buffer && !inDoorX) { e.y = b.y - buffer; e.velY = 0; }
-                                if (relY > b.h - buffer && !inDoorX) { e.y = b.y + b.h + buffer; e.velY = 0; }
-                                if (relX < buffer) { e.x = b.x - buffer; e.velX = 0; }
-                                if (relX > b.w - buffer) { e.x = b.x + b.w + buffer; e.velX = 0; }
-                                const splitX = b.rooms[0].w, splitY = b.rooms[0].h;
-                                const inIntDoorV = relY > splitY * 0.4 && relY < splitY * 0.7;
-                                const inIntDoorH = relX > splitX * 0.4 && relX < splitX * 0.7;
-                                if (Math.abs(relX - splitX) < buffer && !inIntDoorV) {
-                                    e.x = (relX < splitX) ? b.x + splitX - buffer : b.x + splitX + buffer;
+                            if (e.x > houseObj.x - buffer && e.x < houseObj.x + houseObj.w + buffer && e.y > houseObj.y - buffer && e.y < houseObj.y + houseObj.h + buffer) {
+                                const relX = e.x - houseObj.x, relY = e.y - houseObj.y;
+                                const inDoorX = relX > houseObj.w * 0.4 && relX < houseObj.w * 0.6;
+                                if (relY < buffer && !inDoorX) { e.y = houseObj.y - buffer; e.velY = 0; }
+                                if (relY > houseObj.h - buffer && !inDoorX) { e.y = houseObj.y + houseObj.h + buffer; e.velY = 0; }
+                                if (relX < buffer) { e.x = houseObj.x - buffer; e.velX = 0; }
+                                if (relX > houseObj.w - buffer) { e.x = houseObj.x + houseObj.w + buffer; e.velX = 0; }
+                                const sX = houseObj.rooms[0].w, sY = houseObj.rooms[0].h;
+                                const inIntDoorV = relY > sY * 0.4 && relY < sY * 0.7;
+                                const inIntDoorH = relX > sX * 0.4 && relX < sX * 0.7;
+                                if (Math.abs(relX - sX) < buffer && !inIntDoorV) {
+                                    e.x = (relX < sX) ? houseObj.x + sX - buffer : houseObj.x + sX + buffer;
                                     e.velX = 0;
                                 }
-                                if (Math.abs(relY - splitY) < buffer && !inIntDoorH) {
-                                    e.y = (relY < splitY) ? b.y + splitY - buffer : b.y + splitY + buffer;
+                                if (Math.abs(relY - sY) < buffer && !inIntDoorH) {
+                                    e.y = (relY < sY) ? houseObj.y + sY - buffer : houseObj.y + sY + buffer;
                                     e.velY = 0;
                                 }
                             }
@@ -2380,12 +2380,22 @@
 
         document.querySelectorAll('.mode-btn').forEach(b => {
             b.onclick = () => {
-                let mode = 'solo';
-                if (b.classList.contains('solo')) mode = 'solo';
-                else if (b.classList.contains('duo')) mode = 'duo';
-                else if (b.classList.contains('squad')) mode = 'squad';
-                else if (b.classList.contains('path-to-pro')) mode = 'path-to-pro';
-                engine.start(mode);
+                try {
+                    let mode = 'solo';
+                    if (b.classList.contains('solo')) mode = 'solo';
+                    else if (b.classList.contains('duo')) mode = 'duo';
+                    else if (b.classList.contains('squad')) mode = 'squad';
+                    else if (b.classList.contains('path-to-pro')) mode = 'path-to-pro';
+                    
+                    console.log("Starting match: ", mode);
+                    // Hide menu early to show it's working
+                    document.getElementById('main-menu').style.display = 'none';
+                    engine.start(mode);
+                } catch(err) {
+                    console.error("Failed to start match:", err);
+                    alert("Error starting match. Please check console.");
+                    document.getElementById('main-menu').style.display = 'flex';
+                }
             };
         });
     </script>
