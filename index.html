@@ -1789,29 +1789,28 @@
                         e.dropScale -= dt * 0.8;
                         if (e.dropScale <= 1) { e.dropScale = 1; e.state = 'playing'; }
                     } else if (e.state === 'playing') {
+                        let moveX = 0, moveY = 0;
+                        let baseSpeed = 160;
+
                         if (e === this.player) {
                             const kb = userData.keybinds;
-                            let mx = 0, my = 0;
-                            if (this.keys[kb.up]) my--; if (this.keys[kb.down]) my++;
-                            if (this.keys[kb.left]) mx--; if (this.keys[kb.right]) mx++;
+                            if (this.keys[kb.up]) moveY--; if (this.keys[kb.down]) moveY++;
+                            if (this.keys[kb.left]) moveX--; if (this.keys[kb.right]) moveX++;
 
                             // Joystick Override
                             if (this.joystick.active) {
-                                mx = this.joystick.dx;
-                                my = this.joystick.dy;
+                                moveX = this.joystick.dx;
+                                moveY = this.joystick.dy;
                             }
 
-                            if (mx !== 0 || my !== 0) {
-                                const m = Math.sqrt(mx * mx + my * my);
-                                const speedMult = this.joystick.active ? 1 : (1 / m);
-                                e.x += (mx * speedMult) * 350 * dt; e.y += (my * speedMult) * 350 * dt;
+                            if (moveX !== 0 || moveY !== 0) {
                                 if (Math.random() < 0.15) audio.walk();
+                                baseSpeed = 350;
                             }
 
                             // Interaction (E)
                             if (this.keys[kb.interact]) {
                                 let acted = false;
-                                // Check crates
                                 this.map.crates.forEach(c => {
                                     if (c.alive && Math.sqrt((c.x - e.x) ** 2 + (c.y - e.y) ** 2) < 80) {
                                         c.alive = false;
@@ -1819,7 +1818,6 @@
                                         audio.crate(); acted = true;
                                     }
                                 });
-                                // Check ground items
                                 for (let i = this.droppedItems.length - 1; i >= 0; i--) {
                                     const item = this.droppedItems[i];
                                     if (Math.sqrt((item.x - e.x) ** 2 + (item.y - e.y) ** 2) < 100) {
@@ -1829,17 +1827,15 @@
                                             this.droppedItems.splice(i, 1);
                                             this.addKillFeed(`Picked up ${item.rarity.toUpperCase()} ${item.type.toUpperCase()}`);
                                             audio.pickup(); acted = true;
-                                            break; // Only pick up one at a time for better feel
+                                            break;
                                         }
                                     }
                                 }
-                                if (acted) this.keys[kb.interact] = false; // Only consume if we did something
+                                if (acted) this.keys[kb.interact] = false;
 
-                                // Check supply drops
                                 this.supplyDrops.forEach((d, idx) => {
                                     if (d.landed && Math.sqrt((d.x-e.x)**2 + (d.y-e.y)**2) < 80) {
                                         this.supplyDrops.splice(idx, 1);
-                                        // 80% chance for sniper in supply drops, 20% for random high-tier weapon
                                         const type = Math.random() < 0.8 ? 'heavy sniper' : Object.keys(WEAPONS)[Math.floor(Math.random()*Object.keys(WEAPONS).length)];
                                         const rarity = this.currentMode === 'path-to-pro' ? 'mythic' : (Math.random() < 0.3 ? 'mythic' : 'legendary'); 
                                         this.droppedItems.push({ x: d.x, y: d.y, type, rarity, r: 15 });
@@ -1848,9 +1844,6 @@
                                 });
                             }
 
-                            // Removed building collision for movement to allow access to crates inside buildings
-                            // Buildings now act as floor markers/loot zones.
-
                             // Angle & Aiming Logic
                             if (this.joystick.active && !this.isAiming) {
                                 e.angle = Math.atan2(this.joystick.dy, this.joystick.dx);
@@ -1858,29 +1851,22 @@
                                 e.angle = Math.atan2(this.mouse.y - this.cvs.height / 2, this.mouse.x - this.cvs.width / 2);
                             }
 
-                            // Mobile Enhancements: Aim Assist & Auto-Fire
+                            // Mobile Enhancements
                             if (this.isTouch) {
                                 let aimTarget = null, aimDist = 600;
                                 this.entities.forEach(other => {
                                     if (other !== e && other.alive && other.team !== e.team && other.state === 'playing') {
-                                        if (other.hidden) return; // Cannot aim assist at hidden targets
+                                        if (other.hidden) return;
                                         const d = Math.sqrt((other.x - e.x) ** 2 + (other.y - e.y) ** 2);
                                         if (d < aimDist) {
                                             const angTo = Math.atan2(other.y - e.y, other.x - e.x);
                                             const diff = Math.abs(this.normalizeAngle(angTo - e.angle));
-                                            if (diff < 0.6) { // ~35 degree cone
-                                                aimDist = d; aimTarget = other;
-                                            }
+                                            if (diff < 0.6) { aimDist = d; aimTarget = other; }
                                         }
                                     }
                                 });
-
                                 if (aimTarget) {
                                     const angTo = Math.atan2(aimTarget.y - e.y, aimTarget.x - e.x);
-                                    // Soft lock: pull angle towards target
-                                    // Soft lock: pull angle towards target
-                                    e.angle = this.lerpAngle(e.angle, angTo, 0.2);
-
                                     e.angle = this.lerpAngle(e.angle, angTo, 0.2);
                                 }
                             }
@@ -1892,10 +1878,7 @@
                             }
                         } else {
                             // --- BOT BRAIN & STEERING ---
-                            let moveX = 0, moveY = 0;
-                            let baseSpeed = 160;
                             let targetEntity = null, targetDist = 1500;
-
                             // Find nearest enemy
                             this.entities.forEach(other => {
                                 if (other !== e && other.alive && other.team !== e.team && other.state === 'playing') {
@@ -1908,7 +1891,6 @@
                             const hasWeapon = e.inventory.some(w => w && WEAPONS[w.type]);
 
                             if (targetEntity && hasWeapon) {
-                                // Combat State
                                 const itm = e.inventory[e.selectedSlot];
                                 if (!itm || !WEAPONS[itm.type]) {
                                     e.selectedSlot = e.inventory.findIndex(w => w && WEAPONS[w.type]);
@@ -1933,7 +1915,6 @@
                                 if (e.lootCD <= 0) {
                                     const rarityOrder = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'];
                                     this.droppedItems.forEach(item => {
-                                        // Ignore if full and not a rarity upgrade for current weapons
                                         let hasSpace = e.inventory.includes(null);
                                         let isUpgrade = false;
                                         if (!hasSpace) {
@@ -1942,7 +1923,6 @@
                                                 if (inv && rarityOrder.indexOf(inv.rarity) < itemScore) isUpgrade = true;
                                             });
                                         }
-
                                         if (hasSpace || isUpgrade) {
                                             const dist = Math.sqrt((item.x - e.x) ** 2 + (item.y - e.y) ** 2);
                                             if (dist < minDist) { minDist = dist; lootTarget = item; }
@@ -1965,13 +1945,11 @@
 
                                     if (minDist < 45) {
                                         if (lootTarget.loot) {
-                                            // It's a crate
                                             lootTarget.alive = false;
                                             this.droppedItems.push({ x: lootTarget.x, y: lootTarget.y, type: lootTarget.loot, rarity: lootTarget.rarity, r: 15 });
                                             if (Math.random() < 0.1) audio.crate();
-                                            e.lootCD = 0.5; // Short pause after opening crate
+                                            e.lootCD = 0.5;
                                         } else {
-                                            // It's a ground item
                                             let slot = e.inventory.indexOf(null);
                                             if (slot === -1) {
                                                 const rarityOrder = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'];
@@ -1981,144 +1959,114 @@
                                                     const s = rarityOrder.indexOf(inv.rarity);
                                                     if (s < worstScore) { worstScore = s; worstIdx = idx; }
                                                 });
-                                                
                                                 if (worstIdx !== -1 && rarityOrder.indexOf(lootTarget.rarity) > worstScore) {
-                                                    // Drop the worst item to ground
                                                     const wrst = e.inventory[worstIdx];
                                                     this.droppedItems.push({ x: e.x, y: e.y, type: wrst.type, rarity: wrst.rarity, r: 15 });
                                                     e.inventory[worstIdx] = null;
                                                     slot = worstIdx;
                                                 }
                                             }
-
                                             if (slot !== -1) {
                                                 e.inventory[slot] = { type: lootTarget.type, rarity: lootTarget.rarity };
                                                 const idx = this.droppedItems.indexOf(lootTarget);
                                                 if (idx !== -1) this.droppedItems.splice(idx, 1);
                                                 e.lootCD = 0.8;
-                                                moveX = 0; moveY = 0; // Only stay still if we actually picked it up
+                                                moveX = 0; moveY = 0;
                                             } else {
-                                                // Could not pick up, ignore this target for a bit so we don't freeze
                                                 e.lootCD = 1.5;
                                             }
                                         }
                                     }
                                 } else {
-                                    // Strategic Wander State (Waypoint-based)
+                                    // Strategic Wander State
                                     if (!e.waypoint || Math.sqrt((e.waypoint.x - e.x) ** 2 + (e.waypoint.y - e.y) ** 2) < 50) {
-                                        // Pick a new waypoint inside the safe zone (storm)
                                         const r = Math.random() * (this.map.stormRadius * 0.8);
                                         const ang = Math.random() * Math.PI * 2;
                                         e.waypoint = {
                                             x: this.map.stormCenter.x + Math.cos(ang) * r,
                                             y: this.map.stormCenter.y + Math.sin(ang) * r
                                         };
-                                        // Clamp to map bounds
                                         e.waypoint.x = Math.max(100, Math.min(this.map.w - 100, e.waypoint.x));
                                         e.waypoint.y = Math.max(100, Math.min(this.map.h - 100, e.waypoint.y));
                                     }
-
                                     moveX = e.waypoint.x - e.x;
                                     moveY = e.waypoint.y - e.y;
                                     baseSpeed = 120;
                                 }
                             }
-
-                            // Normalize Desired Velocity
-                            const d = Math.sqrt(moveX * moveX + moveY * moveY);
-                            if (d > 0) {
-                                moveX /= d; moveY /= d;
-                            } else {
-                                moveX = 0; moveY = 0;
-                            }
-
-                            // Add Obstacle Repulsion
-                            this.map.obstacles.forEach(o => {
-                                if (o.type === 'bush') return;
-                                const dx = e.x - o.x, dy = e.y - o.y;
-                                const odist = Math.sqrt(dx * dx + dy * dy) || 0.1;
-                                if (odist < o.r + e.r + 40) {
-                                    const force = (1 - odist / (o.r + e.r + 40)) * 2.5;
-                                    moveX += (dx / odist) * force;
-                                    moveY += (dy / odist) * force;
-                                }
-                            });
-
-                            // Add Building Wall Collisions
-                            this.map.buildings.forEach(b => {
-                                // Simple bounding box check first to save perf
-                                if (e.x > b.x - 50 && e.x < b.x + b.w + 50 && e.y > b.y - 50 && e.y < b.y + b.h + 50) {
-                                    const splitX = b.rooms[0].w;
-                                    const splitY = b.rooms[0].h;
-                                    const wallPad = e.r + 5;
-
-                                    // Function to repel from a line segment if we are a 'point' (circle)
-                                    const repelFromSegment = (x1, y1, x2, y2) => {
-                                        // Simple approximation: if near segment, push away
-                                        const px = e.x, py = e.y;
-                                        const l2 = (x1-x2)**2 + (y1-y2)**2;
-                                        if (l2 === 0) return;
-                                        let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
-                                        t = Math.max(0, Math.min(1, t));
-                                        const projX = x1 + t * (x2 - x1);
-                                        const projY = y1 + t * (y2 - y1);
-                                        const dist = Math.sqrt((px - projX)**2 + (py - projY)**2) || 0.1;
-                                        if (dist < wallPad) {
-                                            const force = (1 - dist / wallPad) * 4;
-                                            moveX += ((px - projX) / dist) * force;
-                                            moveY += ((py - projY) / dist) * force;
-                                        }
-                                    };
-
-                                    // Exterior Walls (with door gaps matched to Draw logic)
-                                    // North
-                                    repelFromSegment(b.x, b.y, b.x + b.w * 0.4, b.y);
-                                    repelFromSegment(b.x + b.w * 0.6, b.y, b.x + b.w, b.y);
-                                    // South
-                                    repelFromSegment(b.x, b.y + b.h, b.x + b.w * 0.4, b.y + b.h);
-                                    repelFromSegment(b.x + b.w * 0.6, b.y + b.h, b.x + b.w, b.y + b.h);
-                                    // West & East
-                                    repelFromSegment(b.x, b.y, b.x, b.y + b.h);
-                                    repelFromSegment(b.x + b.w, b.y, b.x + b.w, b.y + b.h);
-
-                                    // Internal Walls (matched to Draw logic)
-                                    // Vertical internal
-                                    repelFromSegment(b.x + splitX, b.y, b.x + splitX, b.y + splitY * 0.4);
-                                    repelFromSegment(b.x + splitX, b.y + splitY * 0.7, b.x + splitX, b.y + b.h);
-                                    // Horizontal internal
-                                    repelFromSegment(b.x, b.y + splitY, b.x + splitX * 0.4, b.y + splitY);
-                                    repelFromSegment(b.x + splitX * 0.7, b.y + splitY, b.x + b.w, b.y + splitY);
-                                }
-                            });
-
-                            // Add Bot Collision Avoidance
-                            this.entities.forEach(other => {
-                                if (other !== e && other.alive && other.state === 'playing') {
-                                    const dx = e.x - other.x, dy = e.y - other.y;
-                                    const bdist = Math.sqrt(dx * dx + dy * dy) || 0.1;
-                                    if (bdist < e.r + other.r + 20) {
-                                        const force = (1 - bdist / (e.r + other.r + 20)) * 2;
-                                        moveX += (dx / bdist) * force;
-                                        moveY += (dy / bdist) * force;
-                                    }
-                                }
-                            });
-
-                            // Final Smoothing & Application
-                            const finalDist = Math.sqrt(moveX * moveX + moveY * moveY);
-                            if (finalDist > 1) { moveX /= finalDist; moveY /= finalDist; }
-                            
-                            if (finalDist > 0.1) {
-                                const targetAng = Math.atan2(moveY, moveX);
-                                e.angle = this.lerpAngle(e.angle, targetAng, 0.15);
-                            }
-
-                            e.velX = (e.velX || 0) * 0.85 + moveX * 0.15;
-                            e.velY = (e.velY || 0) * 0.85 + moveY * 0.15;
-
-                            e.x += e.velX * baseSpeed * dt;
-                            e.y += e.velY * baseSpeed * dt;
                         }
+
+                        // Normalize & Apply Shared Collision/Movement logic
+                        const d = Math.sqrt(moveX * moveX + moveY * moveY);
+                        if (d > 0) {
+                            moveX /= d; moveY /= d;
+                        } else {
+                            moveX = 0; moveY = 0;
+                        }
+
+                        // Obstacle Repulsion (EVERYONE)
+                        this.map.obstacles.forEach(o => {
+                            if (o.type === 'bush') return;
+                            const dx = e.x - o.x, dy = e.y - o.y;
+                            const odist = Math.sqrt(dx * dx + dy * dy) || 0.1;
+                            if (odist < o.r + e.r + 40) {
+                                const force = (1 - odist / (o.r + e.r + 40)) * 2.5;
+                                moveX += (dx / odist) * force;
+                                moveY += (dy / odist) * force;
+                            }
+                        });
+
+                        // Building Wall Collisions (EVERYONE)
+                        this.map.buildings.forEach(b => {
+                            if (e.x > b.x - 50 && e.x < b.x + b.w + 50 && e.y > b.y - 50 && e.y < b.y + b.h + 50) {
+                                const splitX = b.rooms[0].w;
+                                const splitY = b.rooms[0].h;
+                                const wallPad = e.r + 5;
+                                const repelFromSegment = (x1, y1, x2, y2) => {
+                                    const px = e.x, py = e.y;
+                                    const l2 = (x1-x2)**2 + (y1-y2)**2;
+                                    if (l2 === 0) return;
+                                    let t = Math.max(0, Math.min(1, ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2));
+                                    const projX = x1 + t * (x2 - x1), projY = y1 + t * (y2 - y1);
+                                    const dist = Math.sqrt((px - projX)**2 + (py - projY)**2) || 0.1;
+                                    if (dist < wallPad) {
+                                        const force = (1 - dist / wallPad) * 4;
+                                        moveX += ((px - projX) / dist) * force;
+                                        moveY += ((py - projY) / dist) * force;
+                                    }
+                                };
+                                repelFromSegment(b.x, b.y, b.x+b.w*0.4, b.y); repelFromSegment(b.x+b.w*0.6, b.y, b.x+b.w, b.y);
+                                repelFromSegment(b.x, b.y+b.h, b.x+b.w*0.4, b.y+b.h); repelFromSegment(b.x+b.w*0.6, b.y+b.h, b.x+b.w, b.y+b.h);
+                                repelFromSegment(b.x, b.y, b.x, b.y+b.h); repelFromSegment(b.x+b.w, b.y, b.x+b.w, b.y+b.h);
+                                repelFromSegment(b.x+splitX, b.y, b.x+splitX, b.y+splitY*0.4); repelFromSegment(b.x+splitX, b.y+splitY*0.7, b.x+splitX, b.y+b.h);
+                                repelFromSegment(b.x, b.y+splitY, b.x+splitX*0.4, b.y+splitY); repelFromSegment(b.x+splitX*0.7, b.y+splitY, b.x+b.w, b.y+splitY);
+                            }
+                        });
+
+                        // Bot-Bot Repulsion
+                        this.entities.forEach(other => {
+                            if (other !== e && other.alive && other.state === 'playing') {
+                                const dx = e.x - other.x, dy = e.y - other.y;
+                                const bdist = Math.sqrt(dx * dx + dy * dy) || 0.1;
+                                if (bdist < e.r + other.r + 20) {
+                                    const force = (1 - bdist / (e.r + other.r + 20)) * 2;
+                                    moveX += (dx / bdist) * force;
+                                    moveY += (dy / bdist) * force;
+                                }
+                            }
+                        });
+
+                        // Final Physics Step
+                        const finalDist = Math.sqrt(moveX * moveX + moveY * moveY);
+                        if (finalDist > 1) { moveX /= finalDist; moveY /= finalDist; }
+                        if (e !== this.player && finalDist > 0.1) {
+                            e.angle = this.lerpAngle(e.angle, Math.atan2(moveY, moveX), 0.15);
+                        }
+                        e.velX = (e.velX || 0) * 0.85 + moveX * 0.15;
+                        e.velY = (e.velY || 0) * 0.85 + moveY * 0.15;
+                        e.x += e.velX * baseSpeed * dt;
+                        e.y += e.velY * baseSpeed * dt;
+                    }
 
                         // Item Pickup (Bots and Player now separate or shared?)
                         // User said press E for everyone to open/pickup. Player already has KB check.
