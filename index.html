@@ -1842,28 +1842,34 @@
                                         }
                                     }
                                 } else {
-                                    // Wander
-                                    if (!e.waypoint || Math.sqrt((e.waypoint.x - e.x) ** 2 + (e.waypoint.y - e.y) ** 2) < 50) {
+                                    // Wander with stuck detection
+                                    if (!e.waypoint || Math.sqrt((e.waypoint.x - e.x) ** 2 + (e.waypoint.y - e.y) ** 2) < 50 || (e.stuckTime > 1.5)) {
                                         e.waypoint = { x: Math.random() * this.map.w, y: Math.random() * this.map.h };
+                                        e.stuckTime = 0;
                                     }
                                     moveX = e.waypoint.x - e.x; moveY = e.waypoint.y - e.y; baseSpeed = 120;
                                 }
                             }
+                            
+                            // Wall Avoidance for Bots
+                            this.map.buildings.forEach(house => {
+                                if (e.x > house.x - 50 && e.x < house.x + house.w + 50 && e.y > house.y - 50 && e.y < house.y + house.h + 50) {
+                                    // If near a house, nudge away from the nearest wall to find doors
+                                    const dx = e.x - (house.x + house.w/2), dy = e.y - (house.y + house.h/2);
+                                    moveX += dx * 0.5; moveY += dy * 0.5;
+                                }
+                            });
+                            
+                            if (Math.abs(e.velX || 0) < 0.1 && Math.abs(e.velY || 0) < 0.1) e.stuckTime = (e.stuckTime || 0) + dt;
+                            else e.stuckTime = 0;
                         }
 
                         // Shared Collision Handling
                         const d = Math.sqrt(moveX * moveX + moveY * moveY);
                         if (d > 0) { moveX /= d; moveY /= d; }
                         
-                        // All vegetation is now walkable for hiding
-                        this.map.obstacles.forEach(o => {
-                            // Only repel slightly from center of trees to keep them walkable but textured
-                            if (o.type === 'tree') {
-                                const dx = e.x - o.x, dy = e.y - o.y;
-                                const odist = Math.sqrt(dx * dx + dy * dy);
-                                if (odist < 10) { moveX += dx * 0.1; moveY += dy * 0.1; }
-                            }
-                        });
+                        // All vegetation is now 100% walkable hideouts
+                        // (Removed all repulsion logic for trees/bushes)
 
 
                         e.velX = (e.velX || 0) * 0.85 + moveX * 0.15;
