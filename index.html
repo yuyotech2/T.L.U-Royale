@@ -1122,47 +1122,8 @@
                             }
                         }
 
-                        // Draw Room Walls
-                        ctx.strokeStyle = '#1f2937';
-                        ctx.lineWidth = 8;
-                        b.rooms.forEach(room => {
-                            const rx = b.x + room.x;
-                            const ry = b.y + room.y;
-                            // Draw room borders (except if they are duplicate internal walls)
-                            // For simplicity, just draw internal cross
-                        });
+                        // Walls fully removed visually
 
-                        // Draw main internal cross walls with door gaps
-                        const splitX = b.rooms[0].w;
-                        const splitY = b.rooms[0].h;
-
-                        ctx.beginPath();
-                        // Vertical internal wall
-                        ctx.moveTo(b.x + splitX, b.y);
-                        ctx.lineTo(b.x + splitX, b.y + splitY * 0.4);
-                        ctx.moveTo(b.x + splitX, b.y + splitY * 0.7);
-                        ctx.lineTo(b.x + splitX, b.y + b.h - (b.h-splitY)*0.3);
-                        ctx.stroke();
-
-                        // Horizontal internal wall
-                        ctx.beginPath();
-                        ctx.moveTo(b.x, b.y + splitY);
-                        ctx.lineTo(b.x + splitX * 0.4, b.y + splitY);
-                        ctx.moveTo(b.x + splitX * 0.7, b.y + splitY);
-                        ctx.lineTo(b.x + b.w, b.y + splitY);
-                        ctx.stroke();
-
-                        // Exterior Walls
-                        ctx.strokeStyle = '#111827';
-                        ctx.lineWidth = 12;
-                        // North
-                        ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x + b.w * 0.4, b.y); ctx.moveTo(b.x + b.w * 0.6, b.y); ctx.lineTo(b.x + b.w, b.y); ctx.stroke();
-                        // South
-                        ctx.beginPath(); ctx.moveTo(b.x, b.y + b.h); ctx.lineTo(b.x + b.w * 0.4, b.y + b.h); ctx.moveTo(b.x + b.w * 0.6, b.y + b.h); ctx.lineTo(b.x + b.w, b.y+b.h); ctx.stroke();
-                        // West
-                        ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x, b.y + b.h); ctx.stroke();
-                        // East
-                        ctx.beginPath(); ctx.moveTo(b.x + b.w, b.y); ctx.lineTo(b.x + b.w, b.y + b.h); ctx.stroke();
                     }
                 });
 
