@@ -1651,9 +1651,9 @@
                     this.planePos.x += this.planeVel.x * dt;
                     this.planePos.y += this.planeVel.y * dt;
 
-                    // Auto-release bots (spread randomly)
+                    // Auto-release bots (faster spread)
                     this.entities.forEach(e => {
-                        if (e.isBot && e.state === 'in_plane' && Math.random() < 0.01) {
+                        if (e.isBot && e.state === 'in_plane' && Math.random() < 0.03) {
                             e.state = 'dropping';
                             e.x = this.planePos.x; e.y = this.planePos.y;
                             // Head to random spot
@@ -1798,7 +1798,11 @@
                             if (this.mouse.left && e.inventory[e.selectedSlot] && e.cd <= 0) {
                                 e.shoot(this);
                                 const itm = e.inventory[e.selectedSlot];
-                                e.cd = WEAPONS[itm.type] ? WEAPONS[itm.type].cd : 2.0;
+                                if (itm && WEAPONS[itm.type]) {
+                                    e.cd = WEAPONS[itm.type].cd;
+                                } else {
+                                    e.cd = 0.5; // Cooldown for switching/using
+                                }
                             }
                         } else {
                             // --- BOT BRAIN ---
