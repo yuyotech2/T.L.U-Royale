@@ -232,12 +232,13 @@
             left: 20px;
             width: 180px;
             height: 180px;
-            background: rgba(0, 0, 0, 0.5);
-            border: 3px solid #fff;
-            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
             overflow: hidden;
             display: none;
-            /* Shown by JS when playing */
             z-index: 40;
         }
 
@@ -404,9 +405,10 @@
         .inv-slot {
             width: 60px;
             height: 60px;
-            background: rgba(0, 0, 0, 0.6);
-            border: 2px solid rgba(255, 255, 255, 0.2);
-            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -1935,7 +1937,6 @@
                         const dStorm = Math.sqrt((e.x - this.map.stormCenter.x) ** 2 + (e.y - this.map.stormCenter.y) ** 2);
                         if (dStorm > this.map.stormRadius) e.takeDamage(dt * 8, null, this);
                         e.x = Math.max(e.r, Math.min(e.x, this.map.w - e.r)); e.y = Math.max(e.r, Math.min(e.y, this.map.h - e.r));
-                    }
                 });
 
                 // Bullets
@@ -2234,13 +2235,13 @@
                 ctx.fillStyle = '#fff'; ctx.font = '900 12px Outfit'; ctx.textAlign = 'left';
                 ctx.fillText("HEALTH", barX + 5, barY - 5);
 
-                // Shield Bar (Always visible now)
-                ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(barX, barY - 45, barWidth, 30);
+                // Shield Bar (Modern Glass Style)
+                ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(barX, barY - 45, barWidth, 30);
                 if (this.player.shield > 0) {
                     ctx.fillStyle = '#3b82f6'; ctx.fillRect(barX, barY - 45, barWidth * (this.player.shield / 100), 30);
                 }
-                ctx.strokeStyle = '#fff'; ctx.strokeRect(barX, barY - 45, barWidth, 30);
-                ctx.fillStyle = '#fff'; ctx.font = '900 12px Outfit'; ctx.textAlign = 'left';
+                ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.strokeRect(barX, barY - 45, barWidth, 30);
+                ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = '900 12px Outfit'; ctx.textAlign = 'left';
                 ctx.fillText("SHIELD", barX + 5, barY - 50);
 
                 if (this.player.shield > 0) {
