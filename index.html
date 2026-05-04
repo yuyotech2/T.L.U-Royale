@@ -1093,12 +1093,7 @@
             }
             draw(ctx, cam, vp, isMinimap = false) {
                 ctx.save();
-                if (!isMinimap) {
-                    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-                    ctx.lineWidth = 1;
-                    for (let x = 0; x < this.w; x += 100) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, this.h); ctx.stroke(); }
-                    for (let y = 0; y < this.h; y += 100) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(this.w, y); ctx.stroke(); }
-                }
+                // Grid lines removed for clean look
 
                 // Houses (Buildings)
                 this.buildings.forEach(b => {
@@ -1107,23 +1102,9 @@
                     ctx.fillRect(b.x, b.y, b.w, b.h);
 
                     if (!isMinimap) {
-                        // Interior Floor Details
-                        ctx.strokeStyle = 'rgba(0,0,0,0.1)';
-                        ctx.lineWidth = 1;
-                        if (b.type === 'wood') {
-                            for (let lx = 20; lx < b.w; lx += 40) {
-                                ctx.beginPath(); ctx.moveTo(b.x + lx, b.y); ctx.lineTo(b.x + lx, b.y + b.h); ctx.stroke();
-                            }
-                        } else {
-                            for (let lx = 40; lx < b.w; lx += 80) {
-                                for (let ly = 40; ly < b.h; ly += 80) {
-                                    ctx.strokeRect(b.x + lx - 40, b.y + ly - 40, 80, 80);
-                                }
-                            }
-                        }
+                        // Floor details removed for clean look
 
                         // Walls fully removed visually
-
                     }
                 });
 
