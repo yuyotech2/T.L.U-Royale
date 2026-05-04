@@ -1169,7 +1169,8 @@
                 this.obstacles.forEach(o => {
                     ctx.fillStyle = o.type === 'tree' ? '#15803d' : '#16a34a';
                     ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2); ctx.fill();
-                    if (!isMinimap && o.type === 'tree') { ctx.strokeStyle = '#14532d'; ctx.lineWidth = 3; ctx.stroke(); }
+                    // All vegetation is now walkable, adding a subtle outline for trees
+                    if (!isMinimap && o.type === 'tree') { ctx.strokeStyle = 'rgba(20, 83, 45, 0.3)'; ctx.lineWidth = 2; ctx.stroke(); }
                 });
 
                 this.crates.forEach(c => {
@@ -1688,10 +1689,8 @@
                     e.hidden = false;
                     if (e.revealTime <= 0 && e.state === 'playing') {
                         this.map.obstacles.forEach(o => {
-                            if (o.type === 'bush') {
-                                const d = Math.sqrt((o.x - e.x) ** 2 + (o.y - e.y) ** 2);
-                                if (d < o.r - 2) e.hidden = true;
-                            }
+                            const d = Math.sqrt((o.x - e.x) ** 2 + (o.y - e.y) ** 2);
+                            if (d < o.r - 2) e.hidden = true;
                         });
                     }
 
@@ -1811,11 +1810,16 @@
                                 }
                             });
 
-                            const hasWeapon = e.inventory.some(w => w && WEAPONS[w.type]);
-                            if (targetEntity && hasWeapon) {
+                            const weaponSlot = e.inventory.findIndex(w => w && WEAPONS[w.type]);
+                            if (targetEntity && weaponSlot !== -1) {
+                                e.selectedSlot = weaponSlot;
                                 moveX = targetEntity.x - e.x; moveY = targetEntity.y - e.y;
                                 e.angle = Math.atan2(moveY, moveX);
-                                if (e.cd <= 0) { e.shoot(this); e.cd = WEAPONS[e.inventory[e.selectedSlot].type].cd * 1.5; }
+                                if (e.cd <= 0) { 
+                                    e.shoot(this); 
+                                    const itm = e.inventory[e.selectedSlot];
+                                    e.cd = WEAPONS[itm.type].cd * 1.5; 
+                                }
                             } else {
                                 // Loot Search or Wander
                                 if (e.lootCD === undefined) e.lootCD = 0; if (e.lootCD > 0) e.lootCD -= dt;
@@ -1851,14 +1855,13 @@
                         const d = Math.sqrt(moveX * moveX + moveY * moveY);
                         if (d > 0) { moveX /= d; moveY /= d; }
                         
-                        // Small obstacle repulsion
+                        // All vegetation is now walkable for hiding
                         this.map.obstacles.forEach(o => {
-                            if (o.type === 'bush') return;
-                            const dx = e.x - o.x, dy = e.y - o.y;
-                            const odist = Math.sqrt(dx * dx + dy * dy);
-                            if (odist < o.r + e.r + 20) {
-                                moveX += (dx / odist) * 2;
-                                moveY += (dy / odist) * 2;
+                            // Only repel slightly from center of trees to keep them walkable but textured
+                            if (o.type === 'tree') {
+                                const dx = e.x - o.x, dy = e.y - o.y;
+                                const odist = Math.sqrt(dx * dx + dy * dy);
+                                if (odist < 10) { moveX += dx * 0.1; moveY += dy * 0.1; }
                             }
                         });
 
