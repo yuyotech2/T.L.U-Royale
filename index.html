@@ -1881,29 +1881,8 @@
                         e.x += e.velX * baseSpeed * dt;
                         e.y += e.velY * baseSpeed * dt;
 
-                        // NEW: Strict Box-Clamping Wall Collision
-                        this.map.buildings.forEach(houseObj => {
-                            const buffer = e.r + 2;
-                            if (e.x > houseObj.x - buffer && e.x < houseObj.x + houseObj.w + buffer && e.y > houseObj.y - buffer && e.y < houseObj.y + houseObj.h + buffer) {
-                                const relX = e.x - houseObj.x, relY = e.y - houseObj.y;
-                                const inDoorX = relX > houseObj.w * 0.4 && relX < houseObj.w * 0.6;
-                                if (relY < buffer && !inDoorX) { e.y = houseObj.y - buffer; e.velY = 0; }
-                                if (relY > houseObj.h - buffer && !inDoorX) { e.y = houseObj.y + houseObj.h + buffer; e.velY = 0; }
-                                if (relX < buffer) { e.x = houseObj.x - buffer; e.velX = 0; }
-                                if (relX > houseObj.w - buffer) { e.x = houseObj.x + houseObj.w + buffer; e.velX = 0; }
-                                const sX = houseObj.rooms[0].w, sY = houseObj.rooms[0].h;
-                                const inIntDoorV = relY > sY * 0.4 && relY < sY * 0.7;
-                                const inIntDoorH = relX > sX * 0.4 && relX < sX * 0.7;
-                                if (Math.abs(relX - sX) < buffer && !inIntDoorV) {
-                                    e.x = (relX < sX) ? houseObj.x + sX - buffer : houseObj.x + sX + buffer;
-                                    e.velX = 0;
-                                }
-                                if (Math.abs(relY - sY) < buffer && !inIntDoorH) {
-                                    e.y = (relY < sY) ? houseObj.y + sY - buffer : houseObj.y + sY + buffer;
-                                    e.velY = 0;
-                                }
-                            }
-                        });
+                        // WALL COLLISIONS REMOVED (As requested: Everyone can now walk through buildings)
+
                     }
 
                         // Item Pickup (Bots and Player now separate or shared?)
