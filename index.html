@@ -1428,8 +1428,8 @@
                     this.mouse.x = e.clientX; 
                     this.mouse.y = e.clientY; 
                     if (userData.is3D && document.pointerLockElement === document.body && this.state === 'playing') {
-                        this.cameraYaw -= e.movementX * 0.002;
-                        this.cameraPitch -= e.movementY * 0.002;
+                        this.cameraYaw += e.movementX * 0.002;
+                        this.cameraPitch += e.movementY * 0.002;
                         this.cameraPitch = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, this.cameraPitch));
                     }
                 };
@@ -1555,19 +1555,34 @@
                 
                 this.scene = new THREE.Scene();
                 this.scene.background = new THREE.Color('#87CEEB');
+                this.scene.fog = new THREE.FogExp2('#87CEEB', 0.0004);
+
                 this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 15000);
                 this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas3d, antialias: true });
                 this.renderer.setSize(window.innerWidth, window.innerHeight);
 
                 const groundGeo = new THREE.PlaneGeometry(this.map.w + 2000, this.map.h + 2000);
-                const groundMat = new THREE.MeshBasicMaterial({ color: '#166534' });
+                const groundMat = new THREE.MeshLambertMaterial({ color: '#166534' });
                 const ground = new THREE.Mesh(groundGeo, groundMat);
                 ground.rotation.x = -Math.PI / 2;
                 ground.position.set(this.map.w/2, 0, this.map.h/2);
                 this.scene.add(ground);
 
-                const light = new THREE.AmbientLight(0xffffff, 1.0);
-                this.scene.add(light);
+                const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+                this.scene.add(ambient);
+                const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+                sun.position.set(this.map.w/2 + 1000, 2000, this.map.h/2 - 1000);
+                this.scene.add(sun);
+
+                // Add Clouds
+                const cloudGeo = new THREE.BoxGeometry(300, 100, 300);
+                const cloudMat = new THREE.MeshLambertMaterial({ color: '#ffffff', transparent: true, opacity: 0.9 });
+                for(let i=0; i<50; i++) {
+                    const c = new THREE.Mesh(cloudGeo, cloudMat);
+                    c.position.set(Math.random() * this.map.w, 800 + Math.random() * 400, Math.random() * this.map.h);
+                    c.scale.setScalar(Math.random() * 1.5 + 0.5);
+                    this.scene.add(c);
+                }
 
                 this.meshes3d = new Map();
                 this.bulletMeshes = new Map();
@@ -1575,8 +1590,8 @@
                 this.crateMeshes = new Map();
                 
                 this.stormMesh = new THREE.Mesh(
-                    new THREE.CylinderGeometry(this.map.stormRadius, this.map.stormRadius, 200, 32, 1, true),
-                    new THREE.MeshBasicMaterial({ color: '#8b5cf6', transparent: true, opacity: 0.3, side: THREE.DoubleSide })
+                    new THREE.CylinderGeometry(this.map.stormRadius, this.map.stormRadius, 2000, 32, 1, true),
+                    new THREE.MeshLambertMaterial({ color: '#8b5cf6', transparent: true, opacity: 0.3, side: THREE.DoubleSide })
                 );
                 this.scene.add(this.stormMesh);
 
@@ -1586,15 +1601,16 @@
             }
 
             update3D() {
-                this.camera.position.set(this.player.x, 30, this.player.y);
+                const playerHeight = 30 + (this.player.dropScale > 1 ? (this.player.dropScale - 1) * 300 : 0);
+                this.camera.position.set(this.player.x, playerHeight, this.player.y);
                 this.camera.rotation.set(0, 0, 0);
                 this.camera.rotateY(-this.cameraYaw - Math.PI/2);
                 this.camera.rotateX(this.cameraPitch);
 
                 // Update Storm
                 this.stormMesh.geometry.dispose();
-                this.stormMesh.geometry = new THREE.CylinderGeometry(Math.max(1, this.map.stormRadius), Math.max(1, this.map.stormRadius), 200, 32, 1, true);
-                this.stormMesh.position.set(this.map.stormCenter.x, 100, this.map.stormCenter.y);
+                this.stormMesh.geometry = new THREE.CylinderGeometry(Math.max(1, this.map.stormRadius), Math.max(1, this.map.stormRadius), 2000, 32, 1, true);
+                this.stormMesh.position.set(this.map.stormCenter.x, 1000, this.map.stormCenter.y);
 
                 // Update Entities
                 this.entities.forEach(e => {
@@ -1605,14 +1621,17 @@
                         this.meshes3d.delete(e);
                         return;
                     }
-                    if (e.alive && !mesh && e.state === 'playing') {
+                    if (e.alive && !mesh && (e.state === 'playing' || e.state === 'dropping')) {
                         const geo = new THREE.CylinderGeometry(e.r, e.r, 40, 8);
-                        const mat = new THREE.MeshBasicMaterial({ color: e.color });
+                        const mat = new THREE.MeshLambertMaterial({ color: e.color });
                         mesh = new THREE.Mesh(geo, mat);
                         this.scene.add(mesh);
                         this.meshes3d.set(e, mesh);
                     }
-                    if (mesh) mesh.position.set(e.x, 20, e.y);
+                    if (mesh) {
+                        const eHeight = 20 + (e.dropScale > 1 ? (e.dropScale - 1) * 300 : 0);
+                        mesh.position.set(e.x, eHeight, e.y);
+                    }
                 });
 
                 // Update Bullets
@@ -1639,7 +1658,7 @@
                     let mesh = this.itemMeshes.get(item);
                     if (!mesh) {
                         const geo = new THREE.BoxGeometry(10, 10, 10);
-                        const mat = new THREE.MeshBasicMaterial({ color: RARITIES[item.rarity]?.color || '#ffffff' });
+                        const mat = new THREE.MeshLambertMaterial({ color: RARITIES[item.rarity]?.color || '#ffffff' });
                         mesh = new THREE.Mesh(geo, mat);
                         this.scene.add(mesh);
                         this.itemMeshes.set(item, mesh);
@@ -1664,7 +1683,7 @@
                     }
                     if (c.alive && !mesh) {
                         const geo = new THREE.BoxGeometry(40, 40, 40);
-                        const mat = new THREE.MeshBasicMaterial({ color: '#facc15' });
+                        const mat = new THREE.MeshLambertMaterial({ color: '#facc15' });
                         mesh = new THREE.Mesh(geo, mat);
                         this.scene.add(mesh);
                         this.crateMeshes.set(c, mesh);
@@ -1676,14 +1695,14 @@
                     this.map.buildings.forEach(b => {
                         const h = 60;
                         const geo = new THREE.BoxGeometry(b.w, h, b.h);
-                        const mat = new THREE.MeshBasicMaterial({ color: b.color });
+                        const mat = new THREE.MeshLambertMaterial({ color: b.color });
                         const mesh = new THREE.Mesh(geo, mat);
                         mesh.position.set(b.x + b.w/2, h/2, b.y + b.h/2);
                         this.scene.add(mesh);
                     });
                     this.map.obstacles.forEach(o => {
                         const geo = new THREE.CylinderGeometry(o.r, o.r, o.type === 'tree' ? 100 : 30, 8);
-                        const mat = new THREE.MeshBasicMaterial({ color: o.type === 'tree' ? '#064e3b' : '#15803d' });
+                        const mat = new THREE.MeshLambertMaterial({ color: o.type === 'tree' ? '#064e3b' : '#15803d' });
                         const mesh = new THREE.Mesh(geo, mat);
                         mesh.position.set(o.x, o.type === 'tree' ? 50 : 15, o.y);
                         this.scene.add(mesh);
