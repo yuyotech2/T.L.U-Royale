@@ -769,7 +769,8 @@
             <button class="mobile-btn" id="btn-switch">SWAP</button>
         </div>
 
-        <canvas id="game-canvas"></canvas>
+        <canvas id="game-canvas-3d" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; display: none;"></canvas>
+        <canvas id="game-canvas" style="position: relative; z-index: 2; pointer-events: auto;"></canvas>
     </div>
 
     <!-- Fresh Salad Bowls Section -->
@@ -1423,8 +1424,22 @@
                     }
                 };
                 window.onkeyup = (e) => this.keys[e.key.toLowerCase()] = false;
-                window.onmousemove = (e) => { this.mouse.x = e.clientX; this.mouse.y = e.clientY; };
-                window.onmousedown = (e) => this.mouse.left = true;
+                window.onmousemove = (e) => { 
+                    this.mouse.x = e.clientX; 
+                    this.mouse.y = e.clientY; 
+                    if (userData.is3D && document.pointerLockElement === document.body && this.state === 'playing') {
+                        this.cameraYaw -= e.movementX * 0.002;
+                        this.cameraPitch -= e.movementY * 0.002;
+                        this.cameraPitch = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, this.cameraPitch));
+                    }
+                };
+                window.onmousedown = (e) => {
+                    this.mouse.left = true;
+                    if (userData.is3D && this.state === 'playing') {
+                        document.body.requestPointerLock = document.body.requestPointerLock || document.body.mozRequestPointerLock;
+                        document.body.requestPointerLock();
+                    }
+                };
                 window.onmouseup = (e) => this.mouse.left = false;
                 window.onwheel = (e) => {
                     if (this.state === 'playing') {
@@ -1531,6 +1546,152 @@
                     e.preventDefault();
                 };
             }
+            init3D() {
+                this.canvas3d = document.getElementById('game-canvas-3d');
+                this.canvas3d.style.display = 'block';
+                this.cvs.style.background = 'transparent';
+                
+                if (this.scene) return;
+                
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color('#87CEEB');
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 15000);
+                this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas3d, antialias: true });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+
+                const groundGeo = new THREE.PlaneGeometry(this.map.w + 2000, this.map.h + 2000);
+                const groundMat = new THREE.MeshBasicMaterial({ color: '#166534' });
+                const ground = new THREE.Mesh(groundGeo, groundMat);
+                ground.rotation.x = -Math.PI / 2;
+                ground.position.set(this.map.w/2, 0, this.map.h/2);
+                this.scene.add(ground);
+
+                const light = new THREE.AmbientLight(0xffffff, 1.0);
+                this.scene.add(light);
+
+                this.meshes3d = new Map();
+                this.bulletMeshes = new Map();
+                this.itemMeshes = new Map();
+                this.crateMeshes = new Map();
+                
+                this.stormMesh = new THREE.Mesh(
+                    new THREE.CylinderGeometry(this.map.stormRadius, this.map.stormRadius, 200, 32, 1, true),
+                    new THREE.MeshBasicMaterial({ color: '#8b5cf6', transparent: true, opacity: 0.3, side: THREE.DoubleSide })
+                );
+                this.scene.add(this.stormMesh);
+
+                this.cameraYaw = 0;
+                this.cameraPitch = 0;
+                this.buildings3dAdded = false;
+            }
+
+            update3D() {
+                this.camera.position.set(this.player.x, 30, this.player.y);
+                this.camera.rotation.set(0, 0, 0);
+                this.camera.rotateY(-this.cameraYaw - Math.PI/2);
+                this.camera.rotateX(this.cameraPitch);
+
+                // Update Storm
+                this.stormMesh.geometry.dispose();
+                this.stormMesh.geometry = new THREE.CylinderGeometry(Math.max(1, this.map.stormRadius), Math.max(1, this.map.stormRadius), 200, 32, 1, true);
+                this.stormMesh.position.set(this.map.stormCenter.x, 100, this.map.stormCenter.y);
+
+                // Update Entities
+                this.entities.forEach(e => {
+                    if (e === this.player) return;
+                    let mesh = this.meshes3d.get(e);
+                    if (!e.alive && mesh) {
+                        this.scene.remove(mesh);
+                        this.meshes3d.delete(e);
+                        return;
+                    }
+                    if (e.alive && !mesh && e.state === 'playing') {
+                        const geo = new THREE.CylinderGeometry(e.r, e.r, 40, 8);
+                        const mat = new THREE.MeshBasicMaterial({ color: e.color });
+                        mesh = new THREE.Mesh(geo, mat);
+                        this.scene.add(mesh);
+                        this.meshes3d.set(e, mesh);
+                    }
+                    if (mesh) mesh.position.set(e.x, 20, e.y);
+                });
+
+                // Update Bullets
+                this.bullets.forEach(b => {
+                    let mesh = this.bulletMeshes.get(b);
+                    if (!mesh) {
+                        const geo = new THREE.SphereGeometry(3, 4, 4);
+                        const mat = new THREE.MeshBasicMaterial({ color: b.color });
+                        mesh = new THREE.Mesh(geo, mat);
+                        this.scene.add(mesh);
+                        this.bulletMeshes.set(b, mesh);
+                    }
+                    mesh.position.set(b.x, 30, b.y);
+                });
+                for (let [b, mesh] of this.bulletMeshes.entries()) {
+                    if (!this.bullets.includes(b)) {
+                        this.scene.remove(mesh);
+                        this.bulletMeshes.delete(b);
+                    }
+                }
+
+                // Update Dropped Items
+                this.droppedItems.forEach(item => {
+                    let mesh = this.itemMeshes.get(item);
+                    if (!mesh) {
+                        const geo = new THREE.BoxGeometry(10, 10, 10);
+                        const mat = new THREE.MeshBasicMaterial({ color: RARITIES[item.rarity]?.color || '#ffffff' });
+                        mesh = new THREE.Mesh(geo, mat);
+                        this.scene.add(mesh);
+                        this.itemMeshes.set(item, mesh);
+                    }
+                    mesh.position.set(item.x, 5, item.y);
+                    mesh.rotation.y += 0.05;
+                });
+                for (let [item, mesh] of this.itemMeshes.entries()) {
+                    if (!this.droppedItems.includes(item)) {
+                        this.scene.remove(mesh);
+                        this.itemMeshes.delete(item);
+                    }
+                }
+
+                // Update Crates
+                this.map.crates.forEach(c => {
+                    let mesh = this.crateMeshes.get(c);
+                    if (!c.alive && mesh) {
+                        this.scene.remove(mesh);
+                        this.crateMeshes.delete(c);
+                        return;
+                    }
+                    if (c.alive && !mesh) {
+                        const geo = new THREE.BoxGeometry(40, 40, 40);
+                        const mat = new THREE.MeshBasicMaterial({ color: '#facc15' });
+                        mesh = new THREE.Mesh(geo, mat);
+                        this.scene.add(mesh);
+                        this.crateMeshes.set(c, mesh);
+                    }
+                    if (mesh) mesh.position.set(c.x, 20, c.y);
+                });
+
+                if (!this.buildings3dAdded) {
+                    this.map.buildings.forEach(b => {
+                        const h = 60;
+                        const geo = new THREE.BoxGeometry(b.w, h, b.h);
+                        const mat = new THREE.MeshBasicMaterial({ color: b.color });
+                        const mesh = new THREE.Mesh(geo, mat);
+                        mesh.position.set(b.x + b.w/2, h/2, b.y + b.h/2);
+                        this.scene.add(mesh);
+                    });
+                    this.map.obstacles.forEach(o => {
+                        const geo = new THREE.CylinderGeometry(o.r, o.r, o.type === 'tree' ? 100 : 30, 8);
+                        const mat = new THREE.MeshBasicMaterial({ color: o.type === 'tree' ? '#064e3b' : '#15803d' });
+                        const mesh = new THREE.Mesh(geo, mat);
+                        mesh.position.set(o.x, o.type === 'tree' ? 50 : 15, o.y);
+                        this.scene.add(mesh);
+                    });
+                    this.buildings3dAdded = true;
+                }
+            }
+
             resize() {
                 this.cvs.width = window.innerWidth; this.cvs.height = window.innerHeight;
             }
@@ -1568,6 +1729,13 @@
 
                 // Add Enemies in Teams
                 const enemyTeamsCount = (totalTargetCount - (mode === 'solo' || mode === 'path-to-pro' ? 1 : teamSize)) / teamSize;
+                
+                if (userData.is3D) {
+                    this.init3D();
+                } else if (this.canvas3d) {
+                    this.canvas3d.style.display = 'none';
+                    this.cvs.style.background = '#22c55e';
+                }
                 for (let t = 0; t < enemyTeamsCount; t++) {
                     const teamId = 'enemy_team_' + t;
                     const teamColor = SKINS[Math.floor(Math.random() * SKINS.length)].color;
@@ -1760,9 +1928,17 @@
                             }
 
                             if (mx !== 0 || my !== 0) {
-                                const m = Math.sqrt(mx * mx + my * my);
+                                let moveX = mx;
+                                let moveY = my;
+                                if (userData.is3D) {
+                                    const c = Math.cos(this.cameraYaw);
+                                    const s = Math.sin(this.cameraYaw);
+                                    moveX = (-my * c) + (mx * -s);
+                                    moveY = (-my * s) + (mx * c);
+                                }
+                                const m = Math.sqrt(moveX * moveX + moveY * moveY);
                                 const speedMult = this.joystick.active ? 1 : (1 / m);
-                                e.x += (mx * speedMult) * 350 * dt; e.y += (my * speedMult) * 350 * dt;
+                                e.x += (moveX * speedMult) * 350 * dt; e.y += (moveY * speedMult) * 350 * dt;
                                 if (Math.random() < 0.15) audio.walk();
                             }
 
@@ -1812,6 +1988,8 @@
                             // Angle & Aiming Logic
                             if (this.joystick.active && !this.isAiming) {
                                 e.angle = Math.atan2(this.joystick.dy, this.joystick.dx);
+                            } else if (userData.is3D) {
+                                e.angle = this.cameraYaw;
                             } else {
                                 e.angle = Math.atan2(this.mouse.y - this.cvs.height / 2, this.mouse.x - this.cvs.width / 2);
                             }
@@ -2129,6 +2307,19 @@
                 document.getElementById('return-lobby').onclick = () => location.reload();
             }
             draw() {
+                if (userData.is3D) {
+                    this.update3D();
+                    this.renderer.render(this.scene, this.camera);
+                    this.ctx.clearRect(0, 0, this.cvs.width, this.cvs.height);
+                    
+                    // Crosshair
+                    this.ctx.fillStyle = '#fff';
+                    this.ctx.fillRect(this.cvs.width/2 - 2, this.cvs.height/2 - 2, 4, 4);
+                    
+                    this.drawHUD();
+                    return; // Skip 2D draw
+                }
+
                 let targetX = this.player.x;
                 let targetY = this.player.y;
 
