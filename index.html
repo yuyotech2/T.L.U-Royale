@@ -58,7 +58,19 @@
             width: 100%;
             height: 100%;
             background-color: #111827;
-            /* Dark BG to make everything pop */
+        }
+
+        #flash-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #fff;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.1s;
         }
 
         .overlay {
@@ -771,6 +783,7 @@
 
         <canvas id="game-canvas-3d" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; display: none;"></canvas>
         <canvas id="game-canvas" style="position: relative; z-index: 2; pointer-events: auto;"></canvas>
+        <div id="flash-overlay"></div>
     </div>
 
     <!-- Fresh Salad Bowls Section -->
@@ -989,7 +1002,9 @@
             'heavy sniper': { dmg: 85, cd: 1.5, speed: 1800, count: 1 },
             'burst rifle': { dmg: 22, cd: 0.45, speed: 1100, count: 3, burstInterval: 0.06, isBurst: true },
             'pistol': { dmg: 16, cd: 0.2, speed: 850, count: 1 },
-            'flame launcher': { dmg: 5, cd: 0.05, speed: 450, count: 1, isFlame: true }
+            'flame launcher': { dmg: 5, cd: 0.05, speed: 450, count: 1, isFlame: true },
+            'frag grenade': { dmg: 110, cd: 1.0, speed: 500, count: 1, isExplosive: true, life: 2.0, r: 250 },
+            'flashbang': { dmg: 0, cd: 1.0, speed: 600, count: 1, isFlash: true, life: 1.5, r: 400 }
         };
 
         const CONSUMABLES = {
@@ -1115,7 +1130,7 @@
                         const medPool = ['bandage', 'medkit', 'mini pot', 'big pot'];
                         loot = medPool[Math.floor(Math.random() * medPool.length)];
                     } else {
-                        const standardPool = ['smg', 'pump shotgun', 'ak-47', 'burst rifle', 'pistol'];
+                        const standardPool = ['smg', 'pump shotgun', 'ak-47', 'burst rifle', 'pistol', 'frag grenade', 'flashbang'];
                         const highTierPool = ['heavy sniper', 'flame launcher'];
                         
                         // Restrict high power weapons to Epic+ rarity
@@ -1337,8 +1352,13 @@
                         vz3d: Math.sin(pitch3d) * w.speed,
                         z3d: 30,
                         dmg: w.dmg * (1 + (Object.keys(RARITIES).indexOf(wp.rarity) * 0.2)),
-                        owner: this, life: w.isFlame ? 0.4 : 1.5, type: wp.type,
-                        color: w.isFlame ? `rgb(255, ${Math.random()*150+50}, 0)` : '#ff0'
+                        owner: this, life: w.life || (w.isFlame ? 0.4 : 1.5), type: wp.type,
+                        color: w.isFlame ? `rgb(255, ${Math.random()*150+50}, 0)` : (w.isExplosive ? '#4ade80' : (w.isFlash ? '#fff' : '#ff0')),
+                        isExplosive: w.isExplosive,
+                        isFlash: w.isFlash,
+                        radius: w.r,
+                        friction: (w.isExplosive || w.isFlash) ? 0.98 : 1.0,
+                        gravity: (w.isExplosive || w.isFlash) ? 1.5 : 0
                     });
                 }
                 const dist = Math.sqrt((this.x - engine.player.x) ** 2 + (this.y - engine.player.y) ** 2);
@@ -1758,17 +1778,32 @@
                     }
                 });
 
-                // Update Bullets
+                // Update Bullets & Projectiles
                 this.bullets.forEach(b => {
                     let mesh = this.bulletMeshes.get(b);
                     if (!mesh) {
-                        const geo = new THREE.SphereGeometry(3, 4, 4);
-                        const mat = new THREE.MeshBasicMaterial({ color: b.color });
+                        let geo;
+                        if (b.isExplosive || b.isFlash) {
+                            geo = b.isExplosive ? new THREE.SphereGeometry(6, 8, 8) : new THREE.CylinderGeometry(4, 4, 10, 8);
+                        } else {
+                            geo = new THREE.SphereGeometry(3, 4, 4);
+                        }
+                        const mat = new THREE.MeshStandardMaterial({ 
+                            color: b.color, 
+                            emissive: b.color, 
+                            emissiveIntensity: (b.isExplosive || b.isFlash) ? 1 : 0.5,
+                            roughness: 0.3,
+                            metalness: 0.8
+                        });
                         mesh = new THREE.Mesh(geo, mat);
+                        mesh.castShadow = true;
                         this.scene.add(mesh);
                         this.bulletMeshes.set(b, mesh);
                     }
                     mesh.position.set(b.x, b.z3d !== undefined ? b.z3d : 30, b.y);
+                    if (b.isFlash || b.isExplosive) {
+                        mesh.rotation.x += 0.1; mesh.rotation.z += 0.1;
+                    }
                 });
                 for (let [b, mesh] of this.bulletMeshes.entries()) {
                     if (!this.bullets.includes(b)) {
@@ -2058,6 +2093,40 @@
                 this.droppedItems.push({ x: ent.x, y: ent.y, type: wp.type, rarity: wp.rarity, r: 15 });
                 ent.inventory[ent.selectedSlot] = null;
             }
+
+            // Resolve a circle entity out of all building AABBs (with door gap on front face)
+            resolveWallCollision(e) {
+                if (!this.map) return;
+                this.map.buildings.forEach(b => {
+                    const doorHalfW = 11; // half of 22-unit door gap
+                    const doorH = 55;     // door height clearance
+
+                    // Is entity inside this building's expanded AABB?
+                    const left   = b.x;
+                    const right  = b.x + b.w;
+                    const top    = b.y;         // (z in 3D)
+                    const bottom = b.y + b.h;
+                    const r = e.r;
+
+                    if (e.x + r > left && e.x - r < right && e.y + r > top && e.y - r < bottom) {
+                        // Entity overlaps — check if they're in the door opening of the front face
+                        const onFrontFace = e.y + r >= bottom - 8 && e.y < bottom;
+                        const inDoorGap   = Math.abs(e.x - (b.x + b.w/2)) < doorHalfW + r;
+                        if (onFrontFace && inDoorGap) return; // let them through the door
+
+                        // Push out on the axis of smallest overlap
+                        const dLeft   = (e.x + r) - left;
+                        const dRight  = right - (e.x - r);
+                        const dTop    = (e.y + r) - top;
+                        const dBottom = bottom - (e.y - r);
+                        const minD = Math.min(dLeft, dRight, dTop, dBottom);
+                        if (minD === dLeft)   e.x -= dLeft;
+                        else if (minD === dRight)  e.x += dRight - (right - left + 2*r) + (right - left);
+                        else if (minD === dTop)    e.y -= dTop;
+                        else                       e.y += dBottom - (bottom - top + 2*r) + (bottom - top);
+                    }
+                });
+            }
             addKillFeed(msg) {
                 const f = document.getElementById('kill-feed');
                 const d = document.createElement('div'); d.className = 'feed-msg'; d.innerText = msg;
@@ -2204,7 +2273,8 @@
                                 }
                                 const m = Math.sqrt(moveX * moveX + moveY * moveY);
                                 const speedMult = this.joystick.active ? 1 : (1 / m);
-                                e.x += (moveX * speedMult) * 350 * dt; e.y += (moveY * speedMult) * 350 * dt;
+                             e.x += (moveX * speedMult) * 350 * dt; e.y += (moveY * speedMult) * 350 * dt;
+                                this.resolveWallCollision(e);
                                 if (Math.random() < 0.15) audio.walk();
                             }
 
@@ -2317,7 +2387,21 @@
                                 }
                                 moveX = targetEntity.x - e.x;
                                 moveY = targetEntity.y - e.y;
-                                if (e.cd <= 0) { e.shoot(this); e.cd = WEAPONS[e.inventory[e.selectedSlot].type].cd * 1.5; }
+                                if (e.cd <= 0) {
+                                    // Chance to throw grenade instead of shooting if we have one
+                                    const thrIdx = e.inventory.findIndex(item => item && (item.type === 'frag grenade' || item.type === 'flashbang'));
+                                    if (thrIdx !== -1 && targetDist < 500 && Math.random() < 0.3) {
+                                        e.selectedSlot = thrIdx;
+                                    } else {
+                                        // Ensure we have a normal weapon selected if we were holding a grenade
+                                        const cur = e.inventory[e.selectedSlot];
+                                        if (cur && (cur.type === 'frag grenade' || cur.type === 'flashbang')) {
+                                            e.selectedSlot = e.inventory.findIndex(w => w && !WEAPONS[w.type].isExplosive && !WEAPONS[w.type].isFlash) || 0;
+                                        }
+                                    }
+                                    e.shoot(this); 
+                                    e.cd = WEAPONS[e.inventory[e.selectedSlot].type].cd * 1.5; 
+                                }
                             } else if (e.team === 'player_team') {
                                 // Follow Teammate State
                                 const dp = Math.sqrt((this.player.x - e.x) ** 2 + (this.player.y - e.y) ** 2);
@@ -2473,6 +2557,7 @@
 
                             e.x += e.velX * baseSpeed * dt;
                             e.y += e.velY * baseSpeed * dt;
+                            this.resolveWallCollision(e); // Bot wall collision
                         }
 
                         // Item Pickup (Bots and Player now separate or shared?)
@@ -2528,14 +2613,75 @@
                     b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
                     // 3D vertical movement
                     if (b.vz3d !== undefined) {
+                        if (b.gravity) b.vz3d -= b.gravity * 20; // 3D Gravity
                         b.z3d = (b.z3d || 30) + b.vz3d * dt;
-                        // Kill bullet if it hits the ground
-                        if (b.z3d <= 0) { b.life = 0; }
+                        
+                        if (b.z3d <= 5) { // Bouncing off ground
+                            b.z3d = 5;
+                            b.vz3d = -b.vz3d * 0.4; // Bounce
+                            b.vx *= 0.7; b.vy *= 0.7; // Friction on ground
+                        }
+                    }
+                    if (b.friction) {
+                        b.vx *= b.friction;
+                        b.vy *= b.friction;
                     }
 
-                    // Wall collision
-                    // Bullets now pass through buildings to allow indoor combat.
-                    // (Old building collision removed)
+                    // Expired logic for flash/grenades
+                    if (b.life <= 0) {
+                        if (b.isExplosive) {
+                            audio.playNoise(0.5, 1.0, 400); // BOOM
+                            this.particles.push({x: b.x, y: b.y, vx: 0, vy: 0, life: 0.4, color: '#f97316', scale: 10});
+                            this.entities.forEach(ent => {
+                                const dist = Math.sqrt((b.x - ent.x)**2 + (b.y - ent.y)**2);
+                                if (dist < b.radius) {
+                                    const falloff = 1 - (dist / b.radius);
+                                    ent.takeDamage(b.dmg * falloff, b.owner, this);
+                                }
+                            });
+                        }
+                        if (b.isFlash) {
+                            // High-pitched ringing sound
+                            audio.playTone(3000, 2.0, 'sine', 0.5); 
+                            audio.playNoise(0.2, 0.8, 2000);
+                            
+                            const dist = Math.sqrt((b.x - this.player.x)**2 + (b.y - this.player.y)**2);
+                            if (dist < b.radius) {
+                                const flash = document.getElementById('flash-overlay');
+                                flash.style.transition = 'none';
+                                flash.style.opacity = '1';
+                                // Really bright white-out effect
+                                flash.style.backgroundColor = '#ffffff';
+                                setTimeout(() => {
+                                    flash.style.transition = 'opacity 5s ease-out';
+                                    flash.style.opacity = '0';
+                                }, 100);
+                            }
+                            // Also flash bots? (simple stun)
+                            this.entities.forEach(ent => {
+                                if (ent.isBot) {
+                                    const d = Math.sqrt((b.x - ent.x)**2 + (b.y - ent.y)**2);
+                                    if (d < b.radius) {
+                                        ent.cd = 4.0; // Stun for 4s
+                                        this.particles.push({x: ent.x, y: ent.y - 20, vx: 0, vy: 0, life: 1, color: '#fff', scale: 5});
+                                    }
+                                }
+                            });
+                        }
+                    }
+
+                    // Wall (building) collision — bullets stop at walls in 3D
+                    if (userData.is3D) {
+                        this.map.buildings.forEach(bld => {
+                            if (b.life <= 0) return;
+                            if (b.x > bld.x && b.x < bld.x + bld.w && b.y > bld.y && b.y < bld.y + bld.h) {
+                                // Allow through door on front face
+                                const onFront = b.y >= bld.y + bld.h - 12;
+                                const inDoor  = Math.abs(b.x - (bld.x + bld.w/2)) < 13;
+                                if (!(onFront && inDoor)) b.life = 0;
+                            }
+                        });
+                    }
 
                     this.entities.forEach(ent => {
                         if (ent.alive && ent.state === 'playing' && ent !== b.owner && ent.team !== b.owner.team && Math.sqrt((b.x - ent.x) ** 2 + (b.y - ent.y) ** 2) < ent.r) {
