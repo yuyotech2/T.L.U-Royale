@@ -1328,9 +1328,14 @@
                 }
                 for (let i = 0; i < w.count; i++) {
                     const spread = (Math.random() - 0.5) * (w.count > 1 ? 0.4 : 0.1);
+                    // 3D pitch support: scale horizontal speed by cos(pitch), add vertical component
+                    const pitch3d = (userData.is3D && this === engine.player) ? engine.cameraPitch : 0;
+                    const hScale = Math.cos(pitch3d);
                     engine.bullets.push({
                         x: this.x + Math.cos(this.angle) * 30, y: this.y + Math.sin(this.angle) * 30,
-                        vx: Math.cos(this.angle + spread) * w.speed, vy: Math.sin(this.angle + spread) * w.speed,
+                        vx: Math.cos(this.angle + spread) * w.speed * hScale, vy: Math.sin(this.angle + spread) * w.speed * hScale,
+                        vz3d: Math.sin(pitch3d) * w.speed,
+                        z3d: 30,
                         dmg: w.dmg * (1 + (Object.keys(RARITIES).indexOf(wp.rarity) * 0.2)),
                         owner: this, life: w.isFlame ? 0.4 : 1.5, type: wp.type,
                         color: w.isFlame ? `rgb(255, ${Math.random()*150+50}, 0)` : '#ff0'
@@ -1550,59 +1555,145 @@
                 this.canvas3d = document.getElementById('game-canvas-3d');
                 this.canvas3d.style.display = 'block';
                 this.cvs.style.background = 'transparent';
-                
                 if (this.scene) return;
-                
-                this.scene = new THREE.Scene();
-                this.scene.background = new THREE.Color('#87CEEB');
-                this.scene.fog = new THREE.FogExp2('#87CEEB', 0.0004);
 
-                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 15000);
+                // ─── Renderer (PBR quality) ───────────────────────────────
+                this.scene = new THREE.Scene();
+                this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 1, 20000);
                 this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas3d, antialias: true });
                 this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
                 this.renderer.shadowMap.enabled = true;
                 this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                this.renderer.toneMappingExposure = 0.85;
+                this.renderer.outputEncoding = THREE.sRGBEncoding;
+                this.scene.fog = new THREE.FogExp2(0xb0d4f1, 0.00025);
 
-                const groundGeo = new THREE.PlaneGeometry(this.map.w + 2000, this.map.h + 2000);
-                const groundMat = new THREE.MeshLambertMaterial({ color: '#166534' });
+                // ─── Sky sphere (gradient) ─────────────────────────────────
+                const skyGeo = new THREE.SphereGeometry(18000, 32, 16);
+                const skyCanvas = document.createElement('canvas');
+                skyCanvas.width = 2; skyCanvas.height = 512;
+                const skyCtx = skyCanvas.getContext('2d');
+                const grad = skyCtx.createLinearGradient(0, 0, 0, 512);
+                grad.addColorStop(0,    '#1a3a6e');
+                grad.addColorStop(0.35, '#3674b8');
+                grad.addColorStop(0.65, '#7ab8e8');
+                grad.addColorStop(1,    '#c8e6f5');
+                skyCtx.fillStyle = grad; skyCtx.fillRect(0, 0, 2, 512);
+                const skyTex = new THREE.CanvasTexture(skyCanvas);
+                const skyMat = new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide });
+                this.scene.add(new THREE.Mesh(skyGeo, skyMat));
+
+                // ─── Procedural Textures ───────────────────────────────────
+                function makeTexture(drawFn, w=512, h=512) {
+                    const c = document.createElement('canvas'); c.width = w; c.height = h;
+                    drawFn(c.getContext('2d'), w, h);
+                    const t = new THREE.CanvasTexture(c);
+                    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+                    return t;
+                }
+
+                const grassTex = makeTexture((ctx, w, h) => {
+                    ctx.fillStyle = '#2d6a2d'; ctx.fillRect(0, 0, w, h);
+                    for (let i = 0; i < 4000; i++) {
+                        ctx.fillStyle = `rgba(${Math.random()*40+10},${Math.random()*60+80},${Math.random()*30+10},0.4)`;
+                        ctx.fillRect(Math.random()*w, Math.random()*h, 2+Math.random()*4, 2+Math.random()*4);
+                    }
+                });
+                grassTex.repeat.set(this.map.w/200, this.map.h/200);
+
+                const concreteTex = makeTexture((ctx, w, h) => {
+                    ctx.fillStyle = '#b0a898'; ctx.fillRect(0, 0, w, h);
+                    for (let i = 0; i < 2000; i++) {
+                        const v = Math.floor(Math.random()*40-20);
+                        ctx.fillStyle = `rgba(${160+v},${150+v},${140+v},0.3)`;
+                        ctx.fillRect(Math.random()*w, Math.random()*h, 1+Math.random()*3, 1+Math.random()*3);
+                    }
+                    // mortar lines
+                    ctx.strokeStyle = 'rgba(100,90,80,0.25)'; ctx.lineWidth = 1;
+                    for (let y=0; y<h; y+=64) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+                    for (let x=0; x<w; x+=128) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
+                });
+                concreteTex.repeat.set(3, 3);
+
+                const woodTex = makeTexture((ctx, w, h) => {
+                    ctx.fillStyle = '#7c4c1e'; ctx.fillRect(0, 0, w, h);
+                    for (let i = 0; i < h; i += 12) {
+                        const v = Math.random()*20-10;
+                        ctx.fillStyle = `rgba(${80+v},${45+v},${15+v},0.5)`;
+                        ctx.fillRect(0, i, w, 10);
+                    }
+                    ctx.strokeStyle = 'rgba(40,20,5,0.2)'; ctx.lineWidth = 0.5;
+                    for (let i = 0; i < h; i += 12) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(w,i); ctx.stroke(); }
+                });
+                woodTex.repeat.set(4, 4);
+
+                const roofTex = makeTexture((ctx, w, h) => {
+                    ctx.fillStyle = '#5c3317'; ctx.fillRect(0, 0, w, h);
+                    for (let y=0; y<h; y+=18) {
+                        ctx.fillStyle = `rgba(${30+Math.random()*20},${10+Math.random()*10},0,0.4)`;
+                        ctx.fillRect(0, y, w, 16);
+                    }
+                });
+                roofTex.repeat.set(4, 2);
+
+                this._tex = { grass: grassTex, concrete: concreteTex, wood: woodTex, roof: roofTex };
+
+                // ─── Ground ────────────────────────────────────────────────
+                const groundGeo = new THREE.PlaneGeometry(this.map.w + 4000, this.map.h + 4000, 1, 1);
+                const groundMat = new THREE.MeshStandardMaterial({ map: grassTex, roughness: 0.95, metalness: 0 });
                 const ground = new THREE.Mesh(groundGeo, groundMat);
                 ground.rotation.x = -Math.PI / 2;
                 ground.position.set(this.map.w/2, 0, this.map.h/2);
                 ground.receiveShadow = true;
                 this.scene.add(ground);
 
-                const ambient = new THREE.AmbientLight(0xffffff, 0.5);
-                this.scene.add(ambient);
-                const sun = new THREE.DirectionalLight(0xffffff, 0.8);
-                sun.position.set(this.map.w/2 + 1000, 2000, this.map.h/2 - 1000);
+                // ─── Lighting ──────────────────────────────────────────────
+                const hemi = new THREE.HemisphereLight(0x87ceeb, 0x3a5c1a, 0.5);
+                this.scene.add(hemi);
+
+                const sun = new THREE.DirectionalLight(0xfff5e0, 1.4);
+                sun.position.set(this.map.w * 0.6, 3000, this.map.h * 0.2);
                 sun.castShadow = true;
-                sun.shadow.camera.left = -4000;
-                sun.shadow.camera.right = 4000;
-                sun.shadow.camera.top = 4000;
-                sun.shadow.camera.bottom = -4000;
-                sun.shadow.camera.far = 10000;
-                sun.shadow.mapSize.width = 2048;
-                sun.shadow.mapSize.height = 2048;
+                sun.shadow.camera.left = -5000; sun.shadow.camera.right = 5000;
+                sun.shadow.camera.top = 5000;  sun.shadow.camera.bottom = -5000;
+                sun.shadow.camera.far = 12000;
+                sun.shadow.mapSize.width = 4096;
+                sun.shadow.mapSize.height = 4096;
+                sun.shadow.bias = -0.001;
                 this.scene.add(sun);
 
-                // Add Clouds
-                const cloudGeo = new THREE.BoxGeometry(300, 100, 300);
-                const cloudMat = new THREE.MeshLambertMaterial({ color: '#ffffff', transparent: true, opacity: 0.9 });
-                for(let i=0; i<50; i++) {
-                    const c = new THREE.Mesh(cloudGeo, cloudMat);
-                    c.position.set(Math.random() * this.map.w, 800 + Math.random() * 400, Math.random() * this.map.h);
-                    c.scale.setScalar(Math.random() * 1.5 + 0.5);
-                    this.scene.add(c);
+                // Fill light from opposite side (like CS:GO bounce)
+                const fill = new THREE.DirectionalLight(0x6699cc, 0.3);
+                fill.position.set(-1000, 1000, this.map.h);
+                this.scene.add(fill);
+
+                // ─── Clouds ────────────────────────────────────────────────
+                for (let i = 0; i < 60; i++) {
+                    const cg = new THREE.Group();
+                    const parts = 2 + Math.floor(Math.random()*3);
+                    for (let p = 0; p < parts; p++) {
+                        const r = 120 + Math.random()*180;
+                        const geo = new THREE.SphereGeometry(r, 7, 5);
+                        const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0, transparent: true, opacity: 0.88 });
+                        const m = new THREE.Mesh(geo, mat);
+                        m.position.set(p*(r*0.8), Math.random()*60, Math.random()*60);
+                        cg.add(m);
+                    }
+                    cg.position.set(Math.random()*this.map.w, 900+Math.random()*500, Math.random()*this.map.h);
+                    this.scene.add(cg);
                 }
 
+                // ─── Maps ──────────────────────────────────────────────────
                 this.meshes3d = new Map();
                 this.bulletMeshes = new Map();
                 this.itemMeshes = new Map();
                 this.crateMeshes = new Map();
-                
+
                 this.stormMesh = new THREE.Mesh(
                     new THREE.CylinderGeometry(this.map.stormRadius, this.map.stormRadius, 2000, 32, 1, true),
-                    new THREE.MeshLambertMaterial({ color: '#8b5cf6', transparent: true, opacity: 0.3, side: THREE.DoubleSide })
+                    new THREE.MeshStandardMaterial({ color: '#7c3aed', transparent: true, opacity: 0.25, side: THREE.DoubleSide, roughness: 1, emissive: '#4c1d95', emissiveIntensity: 0.5 })
                 );
                 this.scene.add(this.stormMesh);
 
@@ -1636,21 +1727,21 @@
                         const group = new THREE.Group();
                         
                         const bodyGeo = new THREE.CylinderGeometry(e.r, e.r, 30, 16);
-                        const bodyMat = new THREE.MeshLambertMaterial({ color: e.color });
+                        const bodyMat = new THREE.MeshStandardMaterial({ color: e.color, roughness: 0.8, metalness: 0.1 });
                         const body = new THREE.Mesh(bodyGeo, bodyMat);
                         body.position.y = 15;
                         body.castShadow = true; body.receiveShadow = true;
                         group.add(body);
                         
                         const headGeo = new THREE.SphereGeometry(e.r * 0.9, 16, 16);
-                        const headMat = new THREE.MeshLambertMaterial({ color: '#fca5a5' }); // default skin tone
+                        const headMat = new THREE.MeshStandardMaterial({ color: '#fca5a5', roughness: 0.6, metalness: 0 });
                         const head = new THREE.Mesh(headGeo, headMat);
                         head.position.y = 35;
                         head.castShadow = true; head.receiveShadow = true;
                         group.add(head);
 
                         const visorGeo = new THREE.BoxGeometry(e.r * 1.4, 6, 6);
-                        const visorMat = new THREE.MeshLambertMaterial({ color: '#111827' });
+                        const visorMat = new THREE.MeshStandardMaterial({ color: '#111827', roughness: 0.2, metalness: 0.6 });
                         const visor = new THREE.Mesh(visorGeo, visorMat);
                         visor.position.set(0, 36, e.r * 0.8);
                         visor.castShadow = true;
@@ -1677,7 +1768,7 @@
                         this.scene.add(mesh);
                         this.bulletMeshes.set(b, mesh);
                     }
-                    mesh.position.set(b.x, 30, b.y);
+                    mesh.position.set(b.x, b.z3d !== undefined ? b.z3d : 30, b.y);
                 });
                 for (let [b, mesh] of this.bulletMeshes.entries()) {
                     if (!this.bullets.includes(b)) {
@@ -1727,138 +1818,90 @@
                 });
 
                 if (!this.buildings3dAdded) {
+                    const tex = this._tex || {};
                     this.map.buildings.forEach(b => {
                         const group = new THREE.Group();
-                        const wallH = 90;
-                        const wallT = 8; // wall thickness
+                        const wallH = 90, wallT = 8;
 
-                        const wallColors = ['#e0d5c5','#d4c9b2','#c8bda5','#bfb499','#d6c8b3'];
-                        const wc = wallColors[Math.floor(Math.random() * wallColors.length)];
-                        const roofColors = ['#8b3a3a','#6b4c3b','#4a5240','#5c4a2a','#7a3b2e'];
-                        const rc = roofColors[Math.floor(Math.random() * roofColors.length)];
+                        const wallMat = new THREE.MeshStandardMaterial({ map: tex.concrete, roughness: 0.88, metalness: 0.0, side: THREE.DoubleSide });
+                        const roofMat = new THREE.MeshStandardMaterial({ map: tex.roof,     roughness: 0.85, metalness: 0.0 });
+                        const floorMat= new THREE.MeshStandardMaterial({ map: tex.wood,     roughness: 0.85, metalness: 0.0, side: THREE.DoubleSide });
+                        const ceilMat = new THREE.MeshStandardMaterial({ color: '#f0ebe0',  roughness: 1.0,  metalness: 0.0, side: THREE.DoubleSide });
+                        const winMat  = new THREE.MeshStandardMaterial({ color: '#bae6fd',  roughness: 0.0,  metalness: 0.3, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+                        const darkWood= new THREE.MeshStandardMaterial({ color: '#92400e',  roughness: 0.85, metalness: 0.0 });
+                        const chairMat= new THREE.MeshStandardMaterial({ color: '#1c1917',  roughness: 0.9,  metalness: 0.0 });
+                        const shelfMat= new THREE.MeshStandardMaterial({ color: '#78350f',  roughness: 0.9,  metalness: 0.0 });
 
-                        const wallMat = new THREE.MeshLambertMaterial({ color: wc, side: THREE.DoubleSide });
+                        // ── Front wall with door gap ──
+                        const doorW = 22, doorH = 55, segW = (b.w - doorW) / 2;
+                        [[-b.w/2 + segW/2, segW], [b.w/2 - segW/2, segW]].forEach(([px, sw]) => {
+                            const m = new THREE.Mesh(new THREE.BoxGeometry(sw, wallH, wallT), wallMat);
+                            m.castShadow = true; m.receiveShadow = true;
+                            m.position.set(px, wallH/2, b.h/2); group.add(m);
+                        });
+                        const fa = new THREE.Mesh(new THREE.BoxGeometry(doorW, wallH - doorH, wallT), wallMat);
+                        fa.castShadow = true; fa.position.set(0, doorH + (wallH - doorH)/2, b.h/2); group.add(fa);
 
-                        // 4 walls (hollow - separate panels)
-                        // Front wall (with door gap)
-                        const doorW = 22, doorH = 55;
-                        const segW = (b.w - doorW) / 2;
-                        // Front left of door
-                        const flGeo = new THREE.BoxGeometry(segW, wallH, wallT);
-                        const fl = new THREE.Mesh(flGeo, wallMat); fl.castShadow = true; fl.receiveShadow = true;
-                        fl.position.set(-b.w/2 + segW/2, wallH/2, b.h/2);
-                        group.add(fl);
-                        // Front right of door
-                        const frGeo = new THREE.BoxGeometry(segW, wallH, wallT);
-                        const fr = new THREE.Mesh(frGeo, wallMat); fr.castShadow = true; fr.receiveShadow = true;
-                        fr.position.set(b.w/2 - segW/2, wallH/2, b.h/2);
-                        group.add(fr);
-                        // Front above door
-                        const faGeo = new THREE.BoxGeometry(doorW, wallH - doorH, wallT);
-                        const fa = new THREE.Mesh(faGeo, wallMat); fa.castShadow = true; fa.receiveShadow = true;
-                        fa.position.set(0, doorH + (wallH - doorH)/2, b.h/2);
-                        group.add(fa);
+                        // ── Other 3 walls ──
+                        [[0, wallH/2, -b.h/2, b.w, wallH, wallT],
+                         [-b.w/2, wallH/2, 0, wallT, wallH, b.h],
+                         [ b.w/2, wallH/2, 0, wallT, wallH, b.h]].forEach(([px,py,pz,gw,gh,gd]) => {
+                            const m = new THREE.Mesh(new THREE.BoxGeometry(gw, gh, gd), wallMat);
+                            m.castShadow = true; m.receiveShadow = true;
+                            m.position.set(px, py, pz); group.add(m);
+                        });
 
-                        // Back wall
-                        const bkGeo = new THREE.BoxGeometry(b.w, wallH, wallT);
-                        const bk = new THREE.Mesh(bkGeo, wallMat); bk.castShadow = true; bk.receiveShadow = true;
-                        bk.position.set(0, wallH/2, -b.h/2);
-                        group.add(bk);
-                        // Left wall
-                        const lwGeo = new THREE.BoxGeometry(wallT, wallH, b.h);
-                        const lw = new THREE.Mesh(lwGeo, wallMat); lw.castShadow = true; lw.receiveShadow = true;
-                        lw.position.set(-b.w/2, wallH/2, 0);
-                        group.add(lw);
-                        // Right wall
-                        const rwGeo = new THREE.BoxGeometry(wallT, wallH, b.h);
-                        const rw = new THREE.Mesh(rwGeo, wallMat); rw.castShadow = true; rw.receiveShadow = true;
-                        rw.position.set(b.w/2, wallH/2, 0);
-                        group.add(rw);
+                        // ── Floor ──
+                        const fl = new THREE.Mesh(new THREE.PlaneGeometry(b.w - wallT*2, b.h - wallT*2), floorMat);
+                        fl.rotation.x = -Math.PI/2; fl.position.set(0, 1, 0); fl.receiveShadow = true; group.add(fl);
 
-                        // Interior floor (wood planks)
-                        const floorGeo = new THREE.PlaneGeometry(b.w - wallT*2, b.h - wallT*2);
-                        const floorMat = new THREE.MeshLambertMaterial({ color: '#a16207', side: THREE.DoubleSide });
-                        const floor = new THREE.Mesh(floorGeo, floorMat); floor.receiveShadow = true;
-                        floor.rotation.x = -Math.PI/2;
-                        floor.position.set(0, 1, 0);
-                        group.add(floor);
+                        // ── Ceiling ──
+                        const ceil = new THREE.Mesh(new THREE.PlaneGeometry(b.w - wallT*2, b.h - wallT*2), ceilMat);
+                        ceil.rotation.x = Math.PI/2; ceil.position.set(0, wallH - 1, 0); group.add(ceil);
 
-                        // Ceiling
-                        const ceilGeo = new THREE.PlaneGeometry(b.w - wallT*2, b.h - wallT*2);
-                        const ceilMat = new THREE.MeshLambertMaterial({ color: '#f5f0e8', side: THREE.DoubleSide });
-                        const ceil = new THREE.Mesh(ceilGeo, ceilMat); ceil.receiveShadow = true;
-                        ceil.rotation.x = Math.PI/2;
-                        ceil.position.set(0, wallH - 1, 0);
-                        group.add(ceil);
+                        // ── Warm room light ──
+                        const roomLight = new THREE.PointLight(0xfff4d0, 1.0, b.w * 1.8);
+                        roomLight.position.set(0, wallH * 0.75, 0); group.add(roomLight);
 
-                        // Interior point light (warm lamp glow)
-                        const roomLight = new THREE.PointLight(0xfff4d0, 0.8, b.w * 1.5);
-                        roomLight.position.set(0, wallH * 0.7, 0);
-                        group.add(roomLight);
+                        // ── Roof ──
+                        const roof = new THREE.Mesh(new THREE.BoxGeometry(b.w + 14, 10, b.h + 14), roofMat);
+                        roof.position.y = wallH + 5; roof.castShadow = true; roof.receiveShadow = true; group.add(roof);
 
-                        // Roof with overhang
-                        const roofGeo = new THREE.BoxGeometry(b.w + 14, 10, b.h + 14);
-                        const roofMat = new THREE.MeshLambertMaterial({ color: rc });
-                        const roof = new THREE.Mesh(roofGeo, roofMat); roof.castShadow = true; roof.receiveShadow = true;
-                        roof.position.y = wallH + 5;
-                        group.add(roof);
-
-                        // Windows (blue glass panes on each wall)
-                        const winMat = new THREE.MeshLambertMaterial({ color: '#bae6fd', transparent: true, opacity: 0.6, side: THREE.DoubleSide });
+                        // ── Windows ──
                         [[0, b.h/2, 0], [0, -b.h/2, Math.PI], [b.w/2, 0, Math.PI/2], [-b.w/2, 0, -Math.PI/2]].forEach(([px, pz, ry]) => {
-                            const wGeo = new THREE.PlaneGeometry(Math.min(b.w, b.h) * 0.25, 22);
-                            const win = new THREE.Mesh(wGeo, winMat);
-                            win.position.set(px, 52, pz); win.rotation.y = ry;
-                            group.add(win);
+                            const win = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(b.w, b.h) * 0.25, 22), winMat);
+                            win.position.set(px, 52, pz); win.rotation.y = ry; group.add(win);
                         });
 
-                        // INTERIOR FURNITURE
-                        // Table in center
-                        const tableTopGeo = new THREE.BoxGeometry(40, 4, 25);
-                        const tableTopMat = new THREE.MeshLambertMaterial({ color: '#92400e' });
-                        const tableTop = new THREE.Mesh(tableTopGeo, tableTopMat); tableTop.castShadow = true; tableTop.receiveShadow = true;
-                        tableTop.position.set(0, 28, 0);
-                        group.add(tableTop);
-                        // Table legs
+                        // ── Table ──
+                        const tableTop = new THREE.Mesh(new THREE.BoxGeometry(40, 4, 25), darkWood);
+                        tableTop.position.set(0, 28, 0); tableTop.castShadow = true; tableTop.receiveShadow = true; group.add(tableTop);
                         [[16,10],[-16,10],[16,-10],[-16,-10]].forEach(([lx,lz]) => {
-                            const legGeo = new THREE.BoxGeometry(4, 28, 4);
-                            const leg = new THREE.Mesh(legGeo, tableTopMat); leg.castShadow = true;
-                            leg.position.set(lx, 14, lz); group.add(leg);
+                            const leg = new THREE.Mesh(new THREE.BoxGeometry(4, 28, 4), darkWood);
+                            leg.position.set(lx, 14, lz); leg.castShadow = true; group.add(leg);
                         });
 
-                        // 2 chairs (simple L-shapes)
+                        // ── Chairs ──
                         [-22, 22].forEach(cz => {
-                            const seatGeo = new THREE.BoxGeometry(18, 4, 16);
-                            const chairMat = new THREE.MeshLambertMaterial({ color: '#1c1917' });
-                            const seat = new THREE.Mesh(seatGeo, chairMat); seat.castShadow = true; seat.receiveShadow = true;
-                            seat.position.set(0, 18, cz); group.add(seat);
-                            const backGeo = new THREE.BoxGeometry(18, 18, 3);
-                            const back = new THREE.Mesh(backGeo, chairMat); back.castShadow = true;
-                            back.position.set(0, 27, cz + (cz > 0 ? 7 : -7)); group.add(back);
+                            const seat = new THREE.Mesh(new THREE.BoxGeometry(18, 4, 16), chairMat);
+                            seat.position.set(0, 18, cz); seat.castShadow = true; seat.receiveShadow = true; group.add(seat);
+                            const back = new THREE.Mesh(new THREE.BoxGeometry(18, 18, 3), chairMat);
+                            back.position.set(0, 27, cz + (cz > 0 ? 7 : -7)); back.castShadow = true; group.add(back);
                         });
 
-                        // Bookshelf on back wall
-                        const shelfGeo = new THREE.BoxGeometry(35, 60, 10);
-                        const shelfMat = new THREE.MeshLambertMaterial({ color: '#78350f' });
-                        const shelf = new THREE.Mesh(shelfGeo, shelfMat); shelf.castShadow = true; shelf.receiveShadow = true;
-                        shelf.position.set(b.w * 0.3, 30, -b.h/2 + 9);
-                        group.add(shelf);
-                        // Books on shelves (colorful boxes)
-                        const bookColors = ['#dc2626','#2563eb','#16a34a','#d97706','#9333ea','#0e7490'];
-                        for(let bk=0; bk<6; bk++) {
-                            const bookGeo = new THREE.BoxGeometry(5, 14, 8);
-                            const bookMat = new THREE.MeshLambertMaterial({ color: bookColors[bk] });
-                            const book = new THREE.Mesh(bookGeo, bookMat);
-                            book.position.set(b.w * 0.3 - 15 + bk * 6, 22 + (bk % 2) * 18, -b.h/2 + 9.5);
-                            group.add(book);
-                        }
+                        // ── Bookshelf ──
+                        const shelf = new THREE.Mesh(new THREE.BoxGeometry(35, 60, 10), shelfMat);
+                        shelf.position.set(b.w * 0.3, 30, -b.h/2 + 9); shelf.castShadow = true; shelf.receiveShadow = true; group.add(shelf);
+                        ['#dc2626','#2563eb','#16a34a','#d97706','#9333ea','#0e7490'].forEach((col, bk) => {
+                            const book = new THREE.Mesh(new THREE.BoxGeometry(5, 14, 8),
+                                new THREE.MeshStandardMaterial({ color: col, roughness: 0.8, metalness: 0 }));
+                            book.position.set(b.w * 0.3 - 15 + bk*6, 22 + (bk%2)*18, -b.h/2 + 9.5); group.add(book);
+                        });
 
-                        // Random scatter box / crate in corner
-                        const scatterGeo = new THREE.BoxGeometry(20, 20, 20);
-                        const scatterMat = new THREE.MeshLambertMaterial({ color: '#d97706' });
-                        const scatter = new THREE.Mesh(scatterGeo, scatterMat); scatter.castShadow = true; scatter.receiveShadow = true;
-                        scatter.position.set(-b.w * 0.35, 10, -b.h * 0.35);
-                        group.add(scatter);
+                        // ── Corner crate ──
+                        const scatter = new THREE.Mesh(new THREE.BoxGeometry(20, 20, 20),
+                            new THREE.MeshStandardMaterial({ color: '#d97706', roughness: 0.8, metalness: 0.1 }));
+                        scatter.position.set(-b.w*0.35, 10, -b.h*0.35); scatter.castShadow = true; scatter.receiveShadow = true; group.add(scatter);
 
                         group.position.set(b.x + b.w/2, 0, b.y + b.h/2);
                         this.scene.add(group);
@@ -2483,6 +2526,12 @@
                 for (let i = this.bullets.length - 1; i >= 0; i--) {
                     const b = this.bullets[i];
                     b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+                    // 3D vertical movement
+                    if (b.vz3d !== undefined) {
+                        b.z3d = (b.z3d || 30) + b.vz3d * dt;
+                        // Kill bullet if it hits the ground
+                        if (b.z3d <= 0) { b.life = 0; }
+                    }
 
                     // Wall collision
                     // Bullets now pass through buildings to allow indoor combat.
