@@ -1729,57 +1729,141 @@
                 if (!this.buildings3dAdded) {
                     this.map.buildings.forEach(b => {
                         const group = new THREE.Group();
-                        const wallH = 80;
+                        const wallH = 90;
+                        const wallT = 8; // wall thickness
 
-                        // Pick a realistic wall color
                         const wallColors = ['#e0d5c5','#d4c9b2','#c8bda5','#bfb499','#d6c8b3'];
                         const wc = wallColors[Math.floor(Math.random() * wallColors.length)];
                         const roofColors = ['#8b3a3a','#6b4c3b','#4a5240','#5c4a2a','#7a3b2e'];
                         const rc = roofColors[Math.floor(Math.random() * roofColors.length)];
 
-                        // Main walls
-                        const wallGeo = new THREE.BoxGeometry(b.w, wallH, b.h);
-                        const wallMat = new THREE.MeshLambertMaterial({ color: wc });
-                        const walls = new THREE.Mesh(wallGeo, wallMat);
-                        walls.position.y = wallH / 2;
-                        walls.castShadow = true; walls.receiveShadow = true;
-                        group.add(walls);
+                        const wallMat = new THREE.MeshLambertMaterial({ color: wc, side: THREE.DoubleSide });
 
-                        // Flat roof with slight overhang
-                        const roofGeo = new THREE.BoxGeometry(b.w + 12, 10, b.h + 12);
+                        // 4 walls (hollow - separate panels)
+                        // Front wall (with door gap)
+                        const doorW = 22, doorH = 55;
+                        const segW = (b.w - doorW) / 2;
+                        // Front left of door
+                        const flGeo = new THREE.BoxGeometry(segW, wallH, wallT);
+                        const fl = new THREE.Mesh(flGeo, wallMat); fl.castShadow = true; fl.receiveShadow = true;
+                        fl.position.set(-b.w/2 + segW/2, wallH/2, b.h/2);
+                        group.add(fl);
+                        // Front right of door
+                        const frGeo = new THREE.BoxGeometry(segW, wallH, wallT);
+                        const fr = new THREE.Mesh(frGeo, wallMat); fr.castShadow = true; fr.receiveShadow = true;
+                        fr.position.set(b.w/2 - segW/2, wallH/2, b.h/2);
+                        group.add(fr);
+                        // Front above door
+                        const faGeo = new THREE.BoxGeometry(doorW, wallH - doorH, wallT);
+                        const fa = new THREE.Mesh(faGeo, wallMat); fa.castShadow = true; fa.receiveShadow = true;
+                        fa.position.set(0, doorH + (wallH - doorH)/2, b.h/2);
+                        group.add(fa);
+
+                        // Back wall
+                        const bkGeo = new THREE.BoxGeometry(b.w, wallH, wallT);
+                        const bk = new THREE.Mesh(bkGeo, wallMat); bk.castShadow = true; bk.receiveShadow = true;
+                        bk.position.set(0, wallH/2, -b.h/2);
+                        group.add(bk);
+                        // Left wall
+                        const lwGeo = new THREE.BoxGeometry(wallT, wallH, b.h);
+                        const lw = new THREE.Mesh(lwGeo, wallMat); lw.castShadow = true; lw.receiveShadow = true;
+                        lw.position.set(-b.w/2, wallH/2, 0);
+                        group.add(lw);
+                        // Right wall
+                        const rwGeo = new THREE.BoxGeometry(wallT, wallH, b.h);
+                        const rw = new THREE.Mesh(rwGeo, wallMat); rw.castShadow = true; rw.receiveShadow = true;
+                        rw.position.set(b.w/2, wallH/2, 0);
+                        group.add(rw);
+
+                        // Interior floor (wood planks)
+                        const floorGeo = new THREE.PlaneGeometry(b.w - wallT*2, b.h - wallT*2);
+                        const floorMat = new THREE.MeshLambertMaterial({ color: '#a16207', side: THREE.DoubleSide });
+                        const floor = new THREE.Mesh(floorGeo, floorMat); floor.receiveShadow = true;
+                        floor.rotation.x = -Math.PI/2;
+                        floor.position.set(0, 1, 0);
+                        group.add(floor);
+
+                        // Ceiling
+                        const ceilGeo = new THREE.PlaneGeometry(b.w - wallT*2, b.h - wallT*2);
+                        const ceilMat = new THREE.MeshLambertMaterial({ color: '#f5f0e8', side: THREE.DoubleSide });
+                        const ceil = new THREE.Mesh(ceilGeo, ceilMat); ceil.receiveShadow = true;
+                        ceil.rotation.x = Math.PI/2;
+                        ceil.position.set(0, wallH - 1, 0);
+                        group.add(ceil);
+
+                        // Interior point light (warm lamp glow)
+                        const roomLight = new THREE.PointLight(0xfff4d0, 0.8, b.w * 1.5);
+                        roomLight.position.set(0, wallH * 0.7, 0);
+                        group.add(roomLight);
+
+                        // Roof with overhang
+                        const roofGeo = new THREE.BoxGeometry(b.w + 14, 10, b.h + 14);
                         const roofMat = new THREE.MeshLambertMaterial({ color: rc });
-                        const roof = new THREE.Mesh(roofGeo, roofMat);
+                        const roof = new THREE.Mesh(roofGeo, roofMat); roof.castShadow = true; roof.receiveShadow = true;
                         roof.position.y = wallH + 5;
-                        roof.castShadow = true; roof.receiveShadow = true;
                         group.add(roof);
 
-                        // Windows on each side
-                        const winMat = new THREE.MeshLambertMaterial({ color: '#93c5fd', transparent: true, opacity: 0.7 });
-                        const winPositions = [
-                            { px: 0, pz: b.h/2 + 1, rx: 0, ry: 0 },
-                            { px: 0, pz: -(b.h/2 + 1), rx: 0, ry: Math.PI },
-                            { px: b.w/2 + 1, pz: 0, rx: 0, ry: Math.PI/2 },
-                            { px: -(b.w/2 + 1), pz: 0, rx: 0, ry: -Math.PI/2 },
-                        ];
-                        winPositions.forEach(wp => {
-                            const wGeo = new THREE.PlaneGeometry(Math.min(b.w, b.h) * 0.3, 25);
+                        // Windows (blue glass panes on each wall)
+                        const winMat = new THREE.MeshLambertMaterial({ color: '#bae6fd', transparent: true, opacity: 0.6, side: THREE.DoubleSide });
+                        [[0, b.h/2, 0], [0, -b.h/2, Math.PI], [b.w/2, 0, Math.PI/2], [-b.w/2, 0, -Math.PI/2]].forEach(([px, pz, ry]) => {
+                            const wGeo = new THREE.PlaneGeometry(Math.min(b.w, b.h) * 0.25, 22);
                             const win = new THREE.Mesh(wGeo, winMat);
-                            win.position.set(wp.px, 45, wp.pz);
-                            win.rotation.y = wp.ry;
-                            win.castShadow = true;
+                            win.position.set(px, 52, pz); win.rotation.y = ry;
                             group.add(win);
                         });
 
-                        // Door on front face
-                        const doorGeo = new THREE.PlaneGeometry(18, 40);
-                        const doorMat = new THREE.MeshLambertMaterial({ color: '#78350f' });
-                        const door = new THREE.Mesh(doorGeo, doorMat);
-                        door.position.set(0, 20, b.h/2 + 1.5);
-                        group.add(door);
+                        // INTERIOR FURNITURE
+                        // Table in center
+                        const tableTopGeo = new THREE.BoxGeometry(40, 4, 25);
+                        const tableTopMat = new THREE.MeshLambertMaterial({ color: '#92400e' });
+                        const tableTop = new THREE.Mesh(tableTopGeo, tableTopMat); tableTop.castShadow = true; tableTop.receiveShadow = true;
+                        tableTop.position.set(0, 28, 0);
+                        group.add(tableTop);
+                        // Table legs
+                        [[16,10],[-16,10],[16,-10],[-16,-10]].forEach(([lx,lz]) => {
+                            const legGeo = new THREE.BoxGeometry(4, 28, 4);
+                            const leg = new THREE.Mesh(legGeo, tableTopMat); leg.castShadow = true;
+                            leg.position.set(lx, 14, lz); group.add(leg);
+                        });
+
+                        // 2 chairs (simple L-shapes)
+                        [-22, 22].forEach(cz => {
+                            const seatGeo = new THREE.BoxGeometry(18, 4, 16);
+                            const chairMat = new THREE.MeshLambertMaterial({ color: '#1c1917' });
+                            const seat = new THREE.Mesh(seatGeo, chairMat); seat.castShadow = true; seat.receiveShadow = true;
+                            seat.position.set(0, 18, cz); group.add(seat);
+                            const backGeo = new THREE.BoxGeometry(18, 18, 3);
+                            const back = new THREE.Mesh(backGeo, chairMat); back.castShadow = true;
+                            back.position.set(0, 27, cz + (cz > 0 ? 7 : -7)); group.add(back);
+                        });
+
+                        // Bookshelf on back wall
+                        const shelfGeo = new THREE.BoxGeometry(35, 60, 10);
+                        const shelfMat = new THREE.MeshLambertMaterial({ color: '#78350f' });
+                        const shelf = new THREE.Mesh(shelfGeo, shelfMat); shelf.castShadow = true; shelf.receiveShadow = true;
+                        shelf.position.set(b.w * 0.3, 30, -b.h/2 + 9);
+                        group.add(shelf);
+                        // Books on shelves (colorful boxes)
+                        const bookColors = ['#dc2626','#2563eb','#16a34a','#d97706','#9333ea','#0e7490'];
+                        for(let bk=0; bk<6; bk++) {
+                            const bookGeo = new THREE.BoxGeometry(5, 14, 8);
+                            const bookMat = new THREE.MeshLambertMaterial({ color: bookColors[bk] });
+                            const book = new THREE.Mesh(bookGeo, bookMat);
+                            book.position.set(b.w * 0.3 - 15 + bk * 6, 22 + (bk % 2) * 18, -b.h/2 + 9.5);
+                            group.add(book);
+                        }
+
+                        // Random scatter box / crate in corner
+                        const scatterGeo = new THREE.BoxGeometry(20, 20, 20);
+                        const scatterMat = new THREE.MeshLambertMaterial({ color: '#d97706' });
+                        const scatter = new THREE.Mesh(scatterGeo, scatterMat); scatter.castShadow = true; scatter.receiveShadow = true;
+                        scatter.position.set(-b.w * 0.35, 10, -b.h * 0.35);
+                        group.add(scatter);
 
                         group.position.set(b.x + b.w/2, 0, b.y + b.h/2);
                         this.scene.add(group);
                     });
+
 
                     this.map.obstacles.forEach(o => {
                         if (o.type === 'tree') {
