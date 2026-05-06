@@ -1708,8 +1708,9 @@
                 fill.position.set(-1000, 1000, this.map.h);
                 this.scene.add(fill);
 
-                // ─── Clouds ────────────────────────────────────────────────
-                for (let i = 0; i < 60; i++) {
+                // ─── Clouds (Optimized) ──────────────────────────────────
+                const cloudCount = userData.lowGraphics ? 10 : 30;
+                for (let i = 0; i < cloudCount; i++) {
                     const cg = new THREE.Group();
                     const parts = 2 + Math.floor(Math.random()*3);
                     for (let p = 0; p < parts; p++) {
@@ -1791,9 +1792,15 @@
                         this.meshes3d.set(e, mesh);
                     }
                     if (mesh) {
-                        const eHeight = (e.dropScale > 1 ? (e.dropScale - 1) * 300 : 0);
-                        mesh.position.set(e.x, eHeight, e.y);
-                        mesh.rotation.y = -e.angle + Math.PI/2;
+                        const dist = Math.sqrt((e.x - this.player.x)**2 + (e.y - this.player.y)**2);
+                        if (dist > 3500 && e !== this.player) {
+                            mesh.visible = false;
+                        } else {
+                            mesh.visible = true;
+                            const eHeight = (e.dropScale > 1 ? (e.dropScale - 1) * 300 : 0);
+                            mesh.position.set(e.x, eHeight, e.y);
+                            mesh.rotation.y = -e.angle + Math.PI/2;
+                        }
                     }
                 });
 
@@ -1913,49 +1920,55 @@
                         const ceil = new THREE.Mesh(new THREE.PlaneGeometry(b.w - wallT*2, b.h - wallT*2), ceilMat);
                         ceil.rotation.x = Math.PI/2; ceil.position.set(0, wallH - 1, 0); group.add(ceil);
 
-                        // ── Warm room light ──
-                        const roomLight = new THREE.PointLight(0xfff4d0, 1.0, b.w * 1.8);
-                        roomLight.position.set(0, wallH * 0.75, 0); group.add(roomLight);
+                        if (!useLowGfx) {
+                            // ── Warm room light ──
+                            const roomLight = new THREE.PointLight(0xfff4d0, 1.0, b.w * 1.8);
+                            roomLight.position.set(0, wallH * 0.75, 0); group.add(roomLight);
+                        }
 
                         // ── Roof ──
                         const roof = new THREE.Mesh(new THREE.BoxGeometry(b.w + 14, 10, b.h + 14), roofMat);
                         roof.position.y = wallH + 5; roof.castShadow = true; roof.receiveShadow = true; group.add(roof);
 
-                        // ── Windows ──
-                        [[0, b.h/2, 0], [0, -b.h/2, Math.PI], [b.w/2, 0, Math.PI/2], [-b.w/2, 0, -Math.PI/2]].forEach(([px, pz, ry]) => {
-                            const win = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(b.w, b.h) * 0.25, 22), winMat);
-                            win.position.set(px, 52, pz); win.rotation.y = ry; group.add(win);
-                        });
+                        if (!useLowGfx) {
+                            // ── Windows ──
+                            [[0, b.h/2, 0], [0, -b.h/2, Math.PI], [b.w/2, 0, Math.PI/2], [-b.w/2, 0, -Math.PI/2]].forEach(([px, pz, ry]) => {
+                                const win = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(b.w, b.h) * 0.25, 22), winMat);
+                                win.position.set(px, 52, pz); win.rotation.y = ry; group.add(win);
+                            });
+                        }
 
-                        // ── Table ──
-                        const tableTop = new THREE.Mesh(new THREE.BoxGeometry(40, 4, 25), darkWood);
-                        tableTop.position.set(0, 28, 0); tableTop.castShadow = true; tableTop.receiveShadow = true; group.add(tableTop);
-                        [[16,10],[-16,10],[16,-10],[-16,-10]].forEach(([lx,lz]) => {
-                            const leg = new THREE.Mesh(new THREE.BoxGeometry(4, 28, 4), darkWood);
-                            leg.position.set(lx, 14, lz); leg.castShadow = true; group.add(leg);
-                        });
+                        if (!useLowGfx) {
+                            // ── Table ──
+                            const tableTop = new THREE.Mesh(new THREE.BoxGeometry(40, 4, 25), darkWood);
+                            tableTop.position.set(0, 28, 0); tableTop.castShadow = true; tableTop.receiveShadow = true; group.add(tableTop);
+                            [[16,10],[-16,10],[16,-10],[-16,-10]].forEach(([lx,lz]) => {
+                                const leg = new THREE.Mesh(new THREE.BoxGeometry(4, 28, 4), darkWood);
+                                leg.position.set(lx, 14, lz); leg.castShadow = true; group.add(leg);
+                            });
 
-                        // ── Chairs ──
-                        [-22, 22].forEach(cz => {
-                            const seat = new THREE.Mesh(new THREE.BoxGeometry(18, 4, 16), chairMat);
-                            seat.position.set(0, 18, cz); seat.castShadow = true; seat.receiveShadow = true; group.add(seat);
-                            const back = new THREE.Mesh(new THREE.BoxGeometry(18, 18, 3), chairMat);
-                            back.position.set(0, 27, cz + (cz > 0 ? 7 : -7)); back.castShadow = true; group.add(back);
-                        });
+                            // ── Chairs ──
+                            [-22, 22].forEach(cz => {
+                                const seat = new THREE.Mesh(new THREE.BoxGeometry(18, 4, 16), chairMat);
+                                seat.position.set(0, 18, cz); seat.castShadow = true; seat.receiveShadow = true; group.add(seat);
+                                const back = new THREE.Mesh(new THREE.BoxGeometry(18, 18, 3), chairMat);
+                                back.position.set(0, 27, cz + (cz > 0 ? 7 : -7)); back.castShadow = true; group.add(back);
+                            });
 
-                        // ── Bookshelf ──
-                        const shelf = new THREE.Mesh(new THREE.BoxGeometry(35, 60, 10), shelfMat);
-                        shelf.position.set(b.w * 0.3, 30, -b.h/2 + 9); shelf.castShadow = true; shelf.receiveShadow = true; group.add(shelf);
-                        ['#dc2626','#2563eb','#16a34a','#d97706','#9333ea','#0e7490'].forEach((col, bk) => {
-                            const book = new THREE.Mesh(new THREE.BoxGeometry(5, 14, 8),
-                                new THREE.MeshStandardMaterial({ color: col, roughness: 0.8, metalness: 0 }));
-                            book.position.set(b.w * 0.3 - 15 + bk*6, 22 + (bk%2)*18, -b.h/2 + 9.5); group.add(book);
-                        });
+                            // ── Bookshelf ──
+                            const shelf = new THREE.Mesh(new THREE.BoxGeometry(35, 60, 10), shelfMat);
+                            shelf.position.set(b.w * 0.3, 30, -b.h/2 + 9); shelf.castShadow = true; shelf.receiveShadow = true; group.add(shelf);
+                            ['#dc2626','#2563eb','#16a34a','#d97706','#9333ea','#0e7490'].forEach((col, bk) => {
+                                const book = new THREE.Mesh(new THREE.BoxGeometry(5, 14, 8),
+                                    new THREE.MeshStandardMaterial({ color: col, roughness: 0.8, metalness: 0 }));
+                                book.position.set(b.w * 0.3 - 15 + bk*6, 22 + (bk%2)*18, -b.h/2 + 9.5); group.add(book);
+                            });
 
-                        // ── Corner crate ──
-                        const scatter = new THREE.Mesh(new THREE.BoxGeometry(20, 20, 20),
-                            new THREE.MeshStandardMaterial({ color: '#d97706', roughness: 0.8, metalness: 0.1 }));
-                        scatter.position.set(-b.w*0.35, 10, -b.h*0.35); scatter.castShadow = true; scatter.receiveShadow = true; group.add(scatter);
+                            // ── Corner crate ──
+                            const scatter = new THREE.Mesh(new THREE.BoxGeometry(20, 20, 20),
+                                new THREE.MeshStandardMaterial({ color: '#d97706', roughness: 0.8, metalness: 0.1 }));
+                            scatter.position.set(-b.w*0.35, 10, -b.h*0.35); scatter.castShadow = true; scatter.receiveShadow = true; group.add(scatter);
+                        }
 
                         group.position.set(b.x + b.w/2, 0, b.y + b.h/2);
                         this.scene.add(group);
@@ -1975,26 +1988,16 @@
                             treeGroup.add(trunk);
 
                             // Foliage (layered cones for pine look)
-                            const fol1Geo = new THREE.ConeGeometry(o.r * 1.2, 60, 8);
-                            const fol1Mat = new THREE.MeshLambertMaterial({ color: '#15803d' });
-                            const fol1 = new THREE.Mesh(fol1Geo, fol1Mat);
-                            fol1.position.y = 70;
-                            fol1.castShadow = true;
-                            treeGroup.add(fol1);
+                            const fol1 = new THREE.Mesh(new THREE.ConeGeometry(o.r * 1.2, 60, 8), new THREE.MeshLambertMaterial({ color: '#15803d' }));
+                            fol1.position.y = 70; fol1.castShadow = true; treeGroup.add(fol1);
 
-                            const fol2Geo = new THREE.ConeGeometry(o.r * 0.9, 50, 8);
-                            const fol2Mat = new THREE.MeshLambertMaterial({ color: '#166534' });
-                            const fol2 = new THREE.Mesh(fol2Geo, fol2Mat);
-                            fol2.position.y = 100;
-                            fol2.castShadow = true;
-                            treeGroup.add(fol2);
+                            if (!userData.lowGraphics) {
+                                const fol2 = new THREE.Mesh(new THREE.ConeGeometry(o.r * 0.9, 50, 8), new THREE.MeshLambertMaterial({ color: '#166534' }));
+                                fol2.position.y = 100; fol2.castShadow = true; treeGroup.add(fol2);
 
-                            const fol3Geo = new THREE.ConeGeometry(o.r * 0.6, 40, 8);
-                            const fol3Mat = new THREE.MeshLambertMaterial({ color: '#14532d' });
-                            const fol3 = new THREE.Mesh(fol3Geo, fol3Mat);
-                            fol3.position.y = 125;
-                            fol3.castShadow = true;
-                            treeGroup.add(fol3);
+                                const fol3 = new THREE.Mesh(new THREE.ConeGeometry(o.r * 0.6, 40, 8), new THREE.MeshLambertMaterial({ color: '#14532d' }));
+                                fol3.position.y = 125; fol3.castShadow = true; treeGroup.add(fol3);
+                            }
 
                             treeGroup.position.set(o.x, 0, o.y);
                             this.scene.add(treeGroup);
