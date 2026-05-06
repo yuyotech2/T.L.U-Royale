@@ -738,6 +738,10 @@
                 <div class="settings-grid" id="kb-container">
                     <!-- Dynamic keybinds here -->
                 </div>
+                <div style="margin-top:20px; display:flex; align-items:center; gap:10px; padding:10px; background:rgba(255,255,255,0.05); border-radius:8px;">
+                    <label style="font-weight:900; flex:1;">LOW GRAPHICS MODE (FOR LAPTOPS)</label>
+                    <input type="checkbox" id="low-gfx-toggle" style="width:25px; height:25px; cursor:pointer;">
+                </div>
                 <button id="close-settings" class="btn-primary" style="margin-top:30px; width:100%;">CLOSE &
                     SAVE</button>
             </div>
@@ -947,7 +951,8 @@
             },
             skin: { color: '#3b82f6', hat: 'none' },
             party: [],
-            is3D: false
+            is3D: false,
+            lowGraphics: false
         };
 
         const SKINS = [
@@ -976,6 +981,7 @@
             document.getElementById('display-wins').innerText = `${userData.wins} Wins`;
             const lvl = Math.floor(userData.proKills / 10) + 1;
             document.getElementById('display-level').innerText = `PRO LVL ${lvl}`;
+            document.getElementById('low-gfx-toggle').checked = !!userData.lowGraphics;
         }
         loadGame();
 
@@ -1088,8 +1094,10 @@
 
         document.getElementById('close-settings').onclick = () => {
             userData.nickname = document.getElementById('player-nick').value;
-            saveGame(); loadGame();
-            settingsModal.style.display = 'none';
+            userData.lowGraphics = document.getElementById('low-gfx-toggle').checked;
+            saveGame();
+            document.getElementById('display-name').innerText = userData.nickname;
+            document.getElementById('settings-modal').style.display = 'none';
         };
 
         // --- GAME LOGIC ---
@@ -1577,21 +1585,28 @@
                 this.cvs.style.background = 'transparent';
                 if (this.scene) return;
 
-                // ─── Renderer (PBR quality) ───────────────────────────────
+                // ─── Renderer (Optimized) ───────────────────────────────
                 this.scene = new THREE.Scene();
                 this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 1, 20000);
-                this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas3d, antialias: true });
+                
+                const useLowGfx = userData.lowGraphics;
+                this.renderer = new THREE.WebGLRenderer({ 
+                    canvas: this.canvas3d, 
+                    antialias: !useLowGfx,
+                    powerPreference: "high-performance"
+                });
                 this.renderer.setSize(window.innerWidth, window.innerHeight);
-                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-                this.renderer.shadowMap.enabled = true;
+                this.renderer.setPixelRatio(useLowGfx ? 1 : Math.min(window.devicePixelRatio, 1.5));
+                
+                this.renderer.shadowMap.enabled = !useLowGfx;
                 this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-                this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                this.renderer.toneMapping = useLowGfx ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
                 this.renderer.toneMappingExposure = 0.85;
                 this.renderer.outputEncoding = THREE.sRGBEncoding;
-                this.scene.fog = new THREE.FogExp2(0xb0d4f1, 0.00025);
+                this.scene.fog = new THREE.FogExp2(0xb0d4f1, useLowGfx ? 0.0001 : 0.00025);
 
                 // ─── Sky sphere (gradient) ─────────────────────────────────
-                const skyGeo = new THREE.SphereGeometry(18000, 32, 16);
+                const skyGeo = new THREE.SphereGeometry(18000, 16, 8);
                 const skyCanvas = document.createElement('canvas');
                 skyCanvas.width = 2; skyCanvas.height = 512;
                 const skyCtx = skyCanvas.getContext('2d');
@@ -1616,19 +1631,21 @@
 
                 const grassTex = makeTexture((ctx, w, h) => {
                     ctx.fillStyle = '#2d6a2d'; ctx.fillRect(0, 0, w, h);
-                    for (let i = 0; i < 4000; i++) {
+                    const pCount = userData.lowGraphics ? 200 : 1000;
+                    for (let i = 0; i < pCount; i++) {
                         ctx.fillStyle = `rgba(${Math.random()*40+10},${Math.random()*60+80},${Math.random()*30+10},0.4)`;
-                        ctx.fillRect(Math.random()*w, Math.random()*h, 2+Math.random()*4, 2+Math.random()*4);
+                        ctx.fillRect(Math.random()*w, Math.random()*h, 3, 3);
                     }
                 });
                 grassTex.repeat.set(this.map.w/200, this.map.h/200);
 
                 const concreteTex = makeTexture((ctx, w, h) => {
                     ctx.fillStyle = '#b0a898'; ctx.fillRect(0, 0, w, h);
-                    for (let i = 0; i < 2000; i++) {
+                    const pCount = userData.lowGraphics ? 100 : 500;
+                    for (let i = 0; i < pCount; i++) {
                         const v = Math.floor(Math.random()*40-20);
                         ctx.fillStyle = `rgba(${160+v},${150+v},${140+v},0.3)`;
-                        ctx.fillRect(Math.random()*w, Math.random()*h, 1+Math.random()*3, 1+Math.random()*3);
+                        ctx.fillRect(Math.random()*w, Math.random()*h, 2, 2);
                     }
                     // mortar lines
                     ctx.strokeStyle = 'rgba(100,90,80,0.25)'; ctx.lineWidth = 1;
@@ -1675,7 +1692,9 @@
 
                 const sun = new THREE.DirectionalLight(0xfff5e0, 1.4);
                 sun.position.set(this.map.w * 0.6, 3000, this.map.h * 0.2);
-                sun.castShadow = true;
+                sun.castShadow = !userData.lowGraphics;
+                sun.shadow.mapSize.width = userData.lowGraphics ? 256 : 512;
+                sun.shadow.mapSize.height = userData.lowGraphics ? 256 : 512;
                 sun.shadow.camera.left = -5000; sun.shadow.camera.right = 5000;
                 sun.shadow.camera.top = 5000;  sun.shadow.camera.bottom = -5000;
                 sun.shadow.camera.far = 12000;
@@ -1753,7 +1772,7 @@
                         body.castShadow = true; body.receiveShadow = true;
                         group.add(body);
                         
-                        const headGeo = new THREE.SphereGeometry(e.r * 0.9, 16, 16);
+                        const headGeo = new THREE.SphereGeometry(e.r * 0.9, 8, 8);
                         const headMat = new THREE.MeshStandardMaterial({ color: '#fca5a5', roughness: 0.6, metalness: 0 });
                         const head = new THREE.Mesh(headGeo, headMat);
                         head.position.y = 35;
@@ -1784,7 +1803,7 @@
                     if (!mesh) {
                         let geo;
                         if (b.isExplosive || b.isFlash) {
-                            geo = b.isExplosive ? new THREE.SphereGeometry(6, 8, 8) : new THREE.CylinderGeometry(4, 4, 10, 8);
+                            geo = b.isExplosive ? new THREE.SphereGeometry(6, 6, 6) : new THREE.CylinderGeometry(4, 4, 10, 6);
                         } else {
                             geo = new THREE.SphereGeometry(3, 4, 4);
                         }
@@ -2079,7 +2098,8 @@
                 this.supplyDrops = []; this.particles = []; this.dropTimer = 45; // First drop at 45s
             }
             addHitParticle(x, y) {
-                for(let i=0; i<5; i++) {
+                const count = userData.lowGraphics ? 2 : 5;
+                for(let i=0; i<count; i++) {
                     this.particles.push({
                         x, y, 
                         vx: (Math.random()-0.5)*200, vy: (Math.random()-0.5)*200,
