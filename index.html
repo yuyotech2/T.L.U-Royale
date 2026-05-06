@@ -1887,7 +1887,7 @@
                         const shelfMat= new THREE.MeshStandardMaterial({ color: '#78350f',  roughness: 0.9,  metalness: 0.0 });
 
                         // ── Front wall with door gap ──
-                        const doorW = 22, doorH = 55, segW = (b.w - doorW) / 2;
+                        const doorW = 50, doorH = 55, segW = (b.w - doorW) / 2;
                         [[-b.w/2 + segW/2, segW], [b.w/2 - segW/2, segW]].forEach(([px, sw]) => {
                             const m = new THREE.Mesh(new THREE.BoxGeometry(sw, wallH, wallT), wallMat);
                             m.castShadow = true; m.receiveShadow = true;
@@ -2118,7 +2118,7 @@
             resolveWallCollision(e) {
                 if (!this.map) return;
                 this.map.buildings.forEach(b => {
-                    const doorHalfW = 11; // half of 22-unit door gap
+                    const doorHalfW = 25; // half of 50-unit door gap
                     const doorH = 55;     // door height clearance
 
                     // Is entity inside this building's expanded AABB?
@@ -2130,8 +2130,9 @@
 
                     if (e.x + r > left && e.x - r < right && e.y + r > top && e.y - r < bottom) {
                         // Entity overlaps — check if they're in the door opening of the front face
-                        const onFrontFace = e.y + r >= bottom - 8 && e.y < bottom;
-                        const inDoorGap   = Math.abs(e.x - (b.x + b.w/2)) < doorHalfW + r;
+                        const onFrontFace = e.y + r >= bottom - 15 && e.y < bottom + 5;
+                        const inDoorGap   = Math.abs(e.x - (b.x + b.w/2)) < doorHalfW - 2; 
+                        // Note: doorHalfW - 2 ensures they don't clip the door frames too much
                         if (onFrontFace && inDoorGap) return; // let them through the door
 
                         // Push out on the axis of smallest overlap
