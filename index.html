@@ -1560,18 +1560,29 @@
                 this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 15000);
                 this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas3d, antialias: true });
                 this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
                 const groundGeo = new THREE.PlaneGeometry(this.map.w + 2000, this.map.h + 2000);
                 const groundMat = new THREE.MeshLambertMaterial({ color: '#166534' });
                 const ground = new THREE.Mesh(groundGeo, groundMat);
                 ground.rotation.x = -Math.PI / 2;
                 ground.position.set(this.map.w/2, 0, this.map.h/2);
+                ground.receiveShadow = true;
                 this.scene.add(ground);
 
                 const ambient = new THREE.AmbientLight(0xffffff, 0.5);
                 this.scene.add(ambient);
                 const sun = new THREE.DirectionalLight(0xffffff, 0.8);
                 sun.position.set(this.map.w/2 + 1000, 2000, this.map.h/2 - 1000);
+                sun.castShadow = true;
+                sun.shadow.camera.left = -4000;
+                sun.shadow.camera.right = 4000;
+                sun.shadow.camera.top = 4000;
+                sun.shadow.camera.bottom = -4000;
+                sun.shadow.camera.far = 10000;
+                sun.shadow.mapSize.width = 2048;
+                sun.shadow.mapSize.height = 2048;
                 this.scene.add(sun);
 
                 // Add Clouds
@@ -1622,15 +1633,37 @@
                         return;
                     }
                     if (e.alive && !mesh && (e.state === 'playing' || e.state === 'dropping')) {
-                        const geo = new THREE.CylinderGeometry(e.r, e.r, 40, 8);
-                        const mat = new THREE.MeshLambertMaterial({ color: e.color });
-                        mesh = new THREE.Mesh(geo, mat);
+                        const group = new THREE.Group();
+                        
+                        const bodyGeo = new THREE.CylinderGeometry(e.r, e.r, 30, 16);
+                        const bodyMat = new THREE.MeshLambertMaterial({ color: e.color });
+                        const body = new THREE.Mesh(bodyGeo, bodyMat);
+                        body.position.y = 15;
+                        body.castShadow = true; body.receiveShadow = true;
+                        group.add(body);
+                        
+                        const headGeo = new THREE.SphereGeometry(e.r * 0.9, 16, 16);
+                        const headMat = new THREE.MeshLambertMaterial({ color: '#fca5a5' }); // default skin tone
+                        const head = new THREE.Mesh(headGeo, headMat);
+                        head.position.y = 35;
+                        head.castShadow = true; head.receiveShadow = true;
+                        group.add(head);
+
+                        const visorGeo = new THREE.BoxGeometry(e.r * 1.4, 6, 6);
+                        const visorMat = new THREE.MeshLambertMaterial({ color: '#111827' });
+                        const visor = new THREE.Mesh(visorGeo, visorMat);
+                        visor.position.set(0, 36, e.r * 0.8);
+                        visor.castShadow = true;
+                        group.add(visor);
+
+                        mesh = group;
                         this.scene.add(mesh);
                         this.meshes3d.set(e, mesh);
                     }
                     if (mesh) {
-                        const eHeight = 20 + (e.dropScale > 1 ? (e.dropScale - 1) * 300 : 0);
+                        const eHeight = (e.dropScale > 1 ? (e.dropScale - 1) * 300 : 0);
                         mesh.position.set(e.x, eHeight, e.y);
+                        mesh.rotation.y = -e.angle + Math.PI/2;
                     }
                 });
 
@@ -1660,6 +1693,7 @@
                         const geo = new THREE.BoxGeometry(10, 10, 10);
                         const mat = new THREE.MeshLambertMaterial({ color: RARITIES[item.rarity]?.color || '#ffffff' });
                         mesh = new THREE.Mesh(geo, mat);
+                        mesh.castShadow = true;
                         this.scene.add(mesh);
                         this.itemMeshes.set(item, mesh);
                     }
@@ -1685,6 +1719,7 @@
                         const geo = new THREE.BoxGeometry(40, 40, 40);
                         const mat = new THREE.MeshLambertMaterial({ color: '#facc15' });
                         mesh = new THREE.Mesh(geo, mat);
+                        mesh.castShadow = true; mesh.receiveShadow = true;
                         this.scene.add(mesh);
                         this.crateMeshes.set(c, mesh);
                     }
@@ -1698,6 +1733,7 @@
                         const mat = new THREE.MeshLambertMaterial({ color: b.color });
                         const mesh = new THREE.Mesh(geo, mat);
                         mesh.position.set(b.x + b.w/2, h/2, b.y + b.h/2);
+                        mesh.castShadow = true; mesh.receiveShadow = true;
                         this.scene.add(mesh);
                     });
                     this.map.obstacles.forEach(o => {
@@ -1705,6 +1741,7 @@
                         const mat = new THREE.MeshLambertMaterial({ color: o.type === 'tree' ? '#064e3b' : '#15803d' });
                         const mesh = new THREE.Mesh(geo, mat);
                         mesh.position.set(o.x, o.type === 'tree' ? 50 : 15, o.y);
+                        mesh.castShadow = true; mesh.receiveShadow = true;
                         this.scene.add(mesh);
                     });
                     this.buildings3dAdded = true;
@@ -2331,9 +2368,10 @@
                     this.renderer.render(this.scene, this.camera);
                     this.ctx.clearRect(0, 0, this.cvs.width, this.cvs.height);
                     
-                    // Crosshair
-                    this.ctx.fillStyle = '#fff';
-                    this.ctx.fillRect(this.cvs.width/2 - 2, this.cvs.height/2 - 2, 4, 4);
+                    // Crosshair (FPS Style)
+                    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                    this.ctx.fillRect(this.cvs.width/2 - 1, this.cvs.height/2 - 10, 2, 20); // Vertical
+                    this.ctx.fillRect(this.cvs.width/2 - 10, this.cvs.height/2 - 1, 20, 2); // Horizontal
                     
                     this.drawHUD();
                     return; // Skip 2D draw
