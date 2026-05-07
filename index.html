@@ -57,6 +57,8 @@
             display: block;
             width: 100%;
             height: 100%;
+        }
+        #game-canvas-3d {
             background-color: #111827;
         }
 
@@ -560,6 +562,16 @@
             font-size: 18px;
             font-weight: 900;
         }
+        #perspective-btn {
+            border: 3px solid var(--accent) !important;
+            box-shadow: 0 0 15px var(--accent);
+            animation: pulse-border 2s infinite;
+        }
+        @keyframes pulse-border {
+            0% { box-shadow: 0 0 5px var(--accent); }
+            50% { box-shadow: 0 0 20px var(--accent); }
+            100% { box-shadow: 0 0 5px var(--accent); }
+        }
     </style>
 </head>
 
@@ -738,9 +750,12 @@
                 <div class="settings-grid" id="kb-container">
                     <!-- Dynamic keybinds here -->
                 </div>
-                <div style="margin-top:20px; display:flex; align-items:center; gap:10px; padding:10px; background:rgba(255,255,255,0.05); border-radius:8px;">
-                    <label style="font-weight:900; flex:1;">LOW GRAPHICS MODE (FOR LAPTOPS)</label>
-                    <input type="checkbox" id="low-gfx-toggle" style="width:25px; height:25px; cursor:pointer;">
+                <div style="margin-top:20px; display:flex; flex-direction:column; gap:10px; padding:10px; background:rgba(255,255,255,0.05); border-radius:8px;">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <label style="font-weight:900; flex:1;">LOW GRAPHICS MODE</label>
+                        <input type="checkbox" id="low-gfx-toggle" style="width:25px; height:25px; cursor:pointer;">
+                    </div>
+                    <button id="btn-reset-gfx" class="btn-secondary" style="font-size: 12px; padding: 5px;">RESET GRAPHICS (FIX BLACK SCREEN)</button>
                 </div>
                 <button id="close-settings" class="btn-primary" style="margin-top:30px; width:100%;">CLOSE &
                     SAVE</button>
@@ -787,6 +802,8 @@
 
         <canvas id="game-canvas-3d" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; display: none;"></canvas>
         <canvas id="game-canvas" style="position: relative; z-index: 2; pointer-events: auto;"></canvas>
+        <div id="debug-info" style="position: absolute; top: 10px; left: 10px; color: #4ade80; font-family: monospace; z-index: 100; font-weight: bold; pointer-events: none; display: none;"></div>
+        <button id="safety-btn" style="position: absolute; top: 10px; right: 10px; z-index: 1000; padding: 10px; background: #f59e0b; color: #fff; border: none; border-radius: 8px; font-weight: 900; cursor: pointer; box-shadow: 0 0 10px rgba(0,0,0,0.5);">FIX BLACK SCREEN</button>
         <div id="flash-overlay" style="opacity:0; pointer-events:none;"></div>
     </div>
 
@@ -1091,6 +1108,20 @@
         });
 
         document.getElementById('close-cosmetics').onclick = () => cosModal.style.display = 'none';
+
+        document.getElementById('btn-reset-gfx').onclick = () => {
+            userData.lowGraphics = true;
+            userData.is3D = false;
+            saveGame();
+            location.reload();
+        };
+
+        document.getElementById('safety-btn').onclick = () => {
+            userData.is3D = false;
+            userData.lowGraphics = true;
+            saveGame();
+            location.reload();
+        };
 
         document.getElementById('close-settings').onclick = () => {
             userData.nickname = document.getElementById('player-nick').value;
@@ -1580,10 +1611,13 @@
                 };
             }
             init3D() {
-                this.canvas3d = document.getElementById('game-canvas-3d');
-                this.canvas3d.style.display = 'block';
-                this.cvs.style.background = 'transparent';
-                if (this.scene) return;
+                try {
+                    if (!window.THREE) throw new Error("THREE.js not loaded");
+                    this.canvas3d = document.getElementById('game-canvas-3d');
+                    this.canvas3d.style.display = 'block';
+                    this.cvs.style.backgroundColor = 'transparent';
+                    this.cvs.style.backgroundImage = 'none';
+                    if (this.scene) return;
 
                 // ─── Renderer (Optimized) ───────────────────────────────
                 this.scene = new THREE.Scene();
@@ -1743,6 +1777,11 @@
             }
 
             update3D() {
+                try {
+                    if (!this.scene || !this.camera) return;
+                    if (document.getElementById('debug-info').style.display === 'none') document.getElementById('debug-info').style.display = 'block';
+                document.getElementById('debug-info').innerText = `3D: ACTIVE | ENT: ${this.entities.length} | STORM: ${Math.floor(this.map.stormRadius)}`;
+
                 const playerHeight = 30 + (this.player.dropScale > 1 ? (this.player.dropScale - 1) * 300 : 0);
                 this.camera.position.set(this.player.x, playerHeight, this.player.y);
                 this.camera.rotation.set(0, 0, 0);
@@ -1857,6 +1896,9 @@
                         this.scene.remove(mesh);
                         this.itemMeshes.delete(item);
                     }
+                }
+                } catch (err) {
+                    console.warn("3D Update Error:", err);
                 }
 
                 // Update Crates
@@ -2012,11 +2054,22 @@
                         }
                     });
                     this.buildings3dAdded = true;
+                } catch (err) {
+                    console.error("3D Init Error:", err);
+                    userData.is3D = false;
+                    if (this.canvas3d) this.canvas3d.style.display = 'none';
+                    this.cvs.style.background = '#22c55e';
+                    alert("3D graphics failed to start. Reverting to 2D mode.");
                 }
             }
 
             resize() {
                 this.cvs.width = window.innerWidth; this.cvs.height = window.innerHeight;
+                if (this.renderer && this.camera) {
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                    this.camera.aspect = window.innerWidth / window.innerHeight;
+                    this.camera.updateProjectionMatrix();
+                }
             }
             start(mode = 'solo') {
                 this.running = true; this.state = 'playing';
