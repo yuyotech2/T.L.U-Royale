@@ -57,22 +57,8 @@
             display: block;
             width: 100%;
             height: 100%;
-        }
-        #game-canvas-3d {
             background-color: #111827;
-        }
-
-        #flash-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: #fff;
-            z-index: 1000;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.1s;
+            /* Dark BG to make everything pop */
         }
 
         .overlay {
@@ -697,7 +683,8 @@
         <div id="plane-hud">PRESS [SPACE] TO DROP</div>
 
         <!-- Victory Screen -->
-        <div id="victory-screen">
+        <div id="flash-overlay" style="position:fixed; top:0; left:0; width:100%; height:100%; background:white; opacity:0; pointer-events:none; z-index:99999; transition: opacity 0.1s linear;"></div>
+    <div id="victory-screen">
             <h1 class="victory-text">#1 VICTORY ROYALE</h1>
         </div>
 
@@ -739,10 +726,6 @@
                 <h2 style="margin-bottom:20px; border-bottom:2px solid #fff;">KEYBINDS</h2>
                 <div class="settings-grid" id="kb-container">
                     <!-- Dynamic keybinds here -->
-                </div>
-                <div style="margin-top:20px; display:flex; align-items:center; gap:10px; padding:10px; background:rgba(255,255,255,0.05); border-radius:8px;">
-                    <label style="font-weight:900; flex:1;">LOW GRAPHICS MODE (FOR LAPTOPS)</label>
-                    <input type="checkbox" id="low-gfx-toggle" style="width:25px; height:25px; cursor:pointer;">
                 </div>
                 <button id="close-settings" class="btn-primary" style="margin-top:30px; width:100%;">CLOSE &
                     SAVE</button>
@@ -789,7 +772,6 @@
 
         <canvas id="game-canvas-3d" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; display: none;"></canvas>
         <canvas id="game-canvas" style="position: relative; z-index: 2; pointer-events: auto;"></canvas>
-        <div id="flash-overlay" style="opacity:0; pointer-events:none;"></div>
     </div>
 
     <!-- Fresh Salad Bowls Section -->
@@ -953,8 +935,7 @@
             },
             skin: { color: '#3b82f6', hat: 'none' },
             party: [],
-            is3D: false,
-            lowGraphics: false
+            is3D: false
         };
 
         const SKINS = [
@@ -971,12 +952,7 @@
 
         function saveGame() { localStorage.setItem(SAVE_KEY, JSON.stringify(userData)); }
         function loadGame() {
-            const keys = ['tlu_royale_save_v3', 'TLU_ROYALE_SAVE', 'tlu_royale_save', 'prime_prominence_save', 'tlu_save'];
-            let saved = null;
-            for(const k of keys) {
-                const s = localStorage.getItem(k);
-                if(s) { saved = s; break; }
-            }
+            const saved = localStorage.getItem(SAVE_KEY);
             if (saved) {
                 const parsed = JSON.parse(saved);
                 const keybinds = { ...userData.keybinds, ...(parsed.keybinds || {}) };
@@ -988,7 +964,6 @@
             document.getElementById('display-wins').innerText = `${userData.wins} Wins`;
             const lvl = Math.floor(userData.proKills / 10) + 1;
             document.getElementById('display-level').innerText = `PRO LVL ${lvl}`;
-            document.getElementById('low-gfx-toggle').checked = !!userData.lowGraphics;
         }
         loadGame();
 
@@ -1016,8 +991,8 @@
             'burst rifle': { dmg: 22, cd: 0.45, speed: 1100, count: 3, burstInterval: 0.06, isBurst: true },
             'pistol': { dmg: 16, cd: 0.2, speed: 850, count: 1 },
             'flame launcher': { dmg: 5, cd: 0.05, speed: 450, count: 1, isFlame: true },
-            'frag grenade': { dmg: 110, cd: 1.0, speed: 500, count: 1, isExplosive: true, life: 2.0, r: 250 },
-            'flashbang': { dmg: 0, cd: 1.0, speed: 600, count: 1, isFlash: true, life: 1.5, r: 400 }
+            'grenade': { dmg: 85, cd: 1.2, speed: 500, count: 1, isThrowable: true, explodeTime: 2.5 },
+            'flashbang': { dmg: 0, cd: 1.2, speed: 500, count: 1, isThrowable: true, explodeTime: 1.8 }
         };
 
         const CONSUMABLES = {
@@ -1101,10 +1076,8 @@
 
         document.getElementById('close-settings').onclick = () => {
             userData.nickname = document.getElementById('player-nick').value;
-            userData.lowGraphics = document.getElementById('low-gfx-toggle').checked;
-            saveGame();
-            document.getElementById('display-name').innerText = userData.nickname;
-            document.getElementById('settings-modal').style.display = 'none';
+            saveGame(); loadGame();
+            settingsModal.style.display = 'none';
         };
 
         // --- GAME LOGIC ---
@@ -1145,7 +1118,7 @@
                         const medPool = ['bandage', 'medkit', 'mini pot', 'big pot'];
                         loot = medPool[Math.floor(Math.random() * medPool.length)];
                     } else {
-                        const standardPool = ['smg', 'pump shotgun', 'ak-47', 'burst rifle', 'pistol', 'frag grenade', 'flashbang'];
+                        const standardPool = ['smg', 'pump shotgun', 'ak-47', 'burst rifle', 'pistol'];
                         const highTierPool = ['heavy sniper', 'flame launcher'];
                         
                         // Restrict high power weapons to Epic+ rarity
@@ -1356,6 +1329,24 @@
                     this.cd = w.cd;
                     return;
                 }
+                
+                if (w.isThrowable) {
+                    const pitch3d = (userData.is3D && this === engine.player) ? engine.cameraPitch : 0;
+                    const hScale = Math.cos(pitch3d);
+                    engine.throwables.push({
+                        x: this.x, y: this.y,
+                        vx: Math.cos(this.angle) * w.speed * hScale, vy: Math.sin(this.angle) * w.speed * hScale,
+                        vz: Math.sin(pitch3d) * w.speed,
+                        z: 40,
+                        timer: w.explodeTime,
+                        type: wp.type,
+                        owner: this,
+                        life: 10 // long life, timer handles explosion
+                    });
+                    this.cd = w.cd;
+                    return;
+                }
+
                 for (let i = 0; i < w.count; i++) {
                     const spread = (Math.random() - 0.5) * (w.count > 1 ? 0.4 : 0.1);
                     // 3D pitch support: scale horizontal speed by cos(pitch), add vertical component
@@ -1367,13 +1358,8 @@
                         vz3d: Math.sin(pitch3d) * w.speed,
                         z3d: 30,
                         dmg: w.dmg * (1 + (Object.keys(RARITIES).indexOf(wp.rarity) * 0.2)),
-                        owner: this, life: w.life || (w.isFlame ? 0.4 : 1.5), type: wp.type,
-                        color: w.isFlame ? `rgb(255, ${Math.random()*150+50}, 0)` : (w.isExplosive ? '#4ade80' : (w.isFlash ? '#fff' : '#ff0')),
-                        isExplosive: w.isExplosive,
-                        isFlash: w.isFlash,
-                        radius: w.r,
-                        friction: (w.isExplosive || w.isFlash) ? 0.98 : 1.0,
-                        gravity: (w.isExplosive || w.isFlash) ? 1.5 : 0
+                        owner: this, life: w.isFlame ? 0.4 : 1.5, type: wp.type,
+                        color: w.isFlame ? `rgb(255, ${Math.random()*150+50}, 0)` : '#ff0'
                     });
                 }
                 const dist = Math.sqrt((this.x - engine.player.x) ** 2 + (this.y - engine.player.y) ** 2);
@@ -1433,10 +1419,9 @@
                 this.running = false; this.state = 'lobby'; this.droppedItems = [];
                 this.supplyDrops = [];
                 this.particles = [];
-                this.cameraYaw = 0;
-                this.cameraPitch = 0;
+                this.bullets = [];
+                this.throwables = [];
                 this.dropTimer = 0;
-                window.addEventListener('resize', () => this.resize());
             }
 
             normalizeAngle(a) {
@@ -1590,30 +1575,38 @@
                 };
             }
             init3D() {
-                try {
-                    if (!window.THREE) throw new Error("THREE.js not loaded");
-                    this.canvas3d = document.getElementById('game-canvas-3d');
-                    this.canvas3d.style.display = 'block';
-                    this.cvs.style.backgroundColor = 'transparent';
-                    this.cvs.style.backgroundImage = 'none';
-                    if (this.scene) return;
-                    this.resize();
+                this.canvas3d = document.getElementById('game-canvas-3d');
+                this.canvas3d.style.display = 'block';
+                this.cvs.style.background = 'transparent';
+                if (this.scene) return;
 
-                // ─── Renderer (Optimized) ───────────────────────────────
+                // ─── Renderer (PBR quality) ───────────────────────────────
                 this.scene = new THREE.Scene();
                 this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 1, 20000);
-                
-                const useLowGfx = userData.lowGraphics;
-                this.renderer = new THREE.WebGLRenderer({ 
-                    canvas: this.canvas3d, 
-                    antialias: false
-                });
+                this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas3d, antialias: true });
                 this.renderer.setSize(window.innerWidth, window.innerHeight);
-                this.renderer.setPixelRatio(useLowGfx ? 1 : Math.min(window.devicePixelRatio, 1.5));
-                
-                this.renderer.shadowMap.enabled = false;
-                this.renderer.outputEncoding = THREE.LinearEncoding;
-                this.scene.background = new THREE.Color(0xb0d4f1);
+                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                this.renderer.toneMappingExposure = 0.85;
+                this.renderer.outputEncoding = THREE.sRGBEncoding;
+                this.scene.fog = new THREE.FogExp2(0xb0d4f1, 0.00025);
+
+                // ─── Sky sphere (gradient) ─────────────────────────────────
+                const skyGeo = new THREE.SphereGeometry(18000, 32, 16);
+                const skyCanvas = document.createElement('canvas');
+                skyCanvas.width = 2; skyCanvas.height = 512;
+                const skyCtx = skyCanvas.getContext('2d');
+                const grad = skyCtx.createLinearGradient(0, 0, 0, 512);
+                grad.addColorStop(0,    '#1a3a6e');
+                grad.addColorStop(0.35, '#3674b8');
+                grad.addColorStop(0.65, '#7ab8e8');
+                grad.addColorStop(1,    '#c8e6f5');
+                skyCtx.fillStyle = grad; skyCtx.fillRect(0, 0, 2, 512);
+                const skyTex = new THREE.CanvasTexture(skyCanvas);
+                const skyMat = new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide });
+                this.scene.add(new THREE.Mesh(skyGeo, skyMat));
 
                 // ─── Procedural Textures ───────────────────────────────────
                 function makeTexture(drawFn, w=512, h=512) {
@@ -1626,21 +1619,19 @@
 
                 const grassTex = makeTexture((ctx, w, h) => {
                     ctx.fillStyle = '#2d6a2d'; ctx.fillRect(0, 0, w, h);
-                    const pCount = userData.lowGraphics ? 200 : 1000;
-                    for (let i = 0; i < pCount; i++) {
+                    for (let i = 0; i < 4000; i++) {
                         ctx.fillStyle = `rgba(${Math.random()*40+10},${Math.random()*60+80},${Math.random()*30+10},0.4)`;
-                        ctx.fillRect(Math.random()*w, Math.random()*h, 3, 3);
+                        ctx.fillRect(Math.random()*w, Math.random()*h, 2+Math.random()*4, 2+Math.random()*4);
                     }
                 });
                 grassTex.repeat.set(this.map.w/200, this.map.h/200);
 
                 const concreteTex = makeTexture((ctx, w, h) => {
                     ctx.fillStyle = '#b0a898'; ctx.fillRect(0, 0, w, h);
-                    const pCount = userData.lowGraphics ? 100 : 500;
-                    for (let i = 0; i < pCount; i++) {
+                    for (let i = 0; i < 2000; i++) {
                         const v = Math.floor(Math.random()*40-20);
                         ctx.fillStyle = `rgba(${160+v},${150+v},${140+v},0.3)`;
-                        ctx.fillRect(Math.random()*w, Math.random()*h, 2, 2);
+                        ctx.fillRect(Math.random()*w, Math.random()*h, 1+Math.random()*3, 1+Math.random()*3);
                     }
                     // mortar lines
                     ctx.strokeStyle = 'rgba(100,90,80,0.25)'; ctx.lineWidth = 1;
@@ -1673,11 +1664,12 @@
                 this._tex = { grass: grassTex, concrete: concreteTex, wood: woodTex, roof: roofTex };
 
                 // ─── Ground ────────────────────────────────────────────────
-                const groundGeo = new THREE.PlaneGeometry(this.map.w + 8000, this.map.h + 8000, 1, 1);
-                const groundMat = new THREE.MeshLambertMaterial({ color: '#22c55e' });
+                const groundGeo = new THREE.PlaneGeometry(this.map.w + 4000, this.map.h + 4000, 1, 1);
+                const groundMat = new THREE.MeshStandardMaterial({ map: grassTex, roughness: 0.95, metalness: 0 });
                 const ground = new THREE.Mesh(groundGeo, groundMat);
                 ground.rotation.x = -Math.PI / 2;
                 ground.position.set(this.map.w/2, 0, this.map.h/2);
+                ground.receiveShadow = true;
                 this.scene.add(ground);
 
                 // ─── Lighting ──────────────────────────────────────────────
@@ -1686,9 +1678,7 @@
 
                 const sun = new THREE.DirectionalLight(0xfff5e0, 1.4);
                 sun.position.set(this.map.w * 0.6, 3000, this.map.h * 0.2);
-                sun.castShadow = !userData.lowGraphics;
-                sun.shadow.mapSize.width = userData.lowGraphics ? 256 : 512;
-                sun.shadow.mapSize.height = userData.lowGraphics ? 256 : 512;
+                sun.castShadow = true;
                 sun.shadow.camera.left = -5000; sun.shadow.camera.right = 5000;
                 sun.shadow.camera.top = 5000;  sun.shadow.camera.bottom = -5000;
                 sun.shadow.camera.far = 12000;
@@ -1702,9 +1692,8 @@
                 fill.position.set(-1000, 1000, this.map.h);
                 this.scene.add(fill);
 
-                // ─── Clouds (Optimized) ──────────────────────────────────
-                const cloudCount = userData.lowGraphics ? 10 : 30;
-                for (let i = 0; i < cloudCount; i++) {
+                // ─── Clouds ────────────────────────────────────────────────
+                for (let i = 0; i < 60; i++) {
                     const cg = new THREE.Group();
                     const parts = 2 + Math.floor(Math.random()*3);
                     for (let p = 0; p < parts; p++) {
@@ -1724,10 +1713,12 @@
                 this.bulletMeshes = new Map();
                 this.itemMeshes = new Map();
                 this.crateMeshes = new Map();
+                this.throwableMeshes = new Map();
+                this.throwables = [];
 
                 this.stormMesh = new THREE.Mesh(
-                    new THREE.CylinderGeometry(1, 1, 2000, 32, 1, true),
-                    new THREE.MeshLambertMaterial({ color: '#7c3aed', transparent: true, opacity: 0.25, side: THREE.DoubleSide, emissive: '#4c1d95', emissiveIntensity: 0.5 })
+                    new THREE.CylinderGeometry(this.map.stormRadius, this.map.stormRadius, 2000, 32, 1, true),
+                    new THREE.MeshStandardMaterial({ color: '#7c3aed', transparent: true, opacity: 0.25, side: THREE.DoubleSide, roughness: 1, emissive: '#4c1d95', emissiveIntensity: 0.5 })
                 );
                 this.scene.add(this.stormMesh);
 
@@ -1737,18 +1728,15 @@
             }
 
             update3D() {
-                try {
-                    if (!this.scene || !this.camera) return;
-
                 const playerHeight = 30 + (this.player.dropScale > 1 ? (this.player.dropScale - 1) * 300 : 0);
-                this.camera.position.set(this.player.x || 0, playerHeight || 30, this.player.y || 0);
+                this.camera.position.set(this.player.x, playerHeight, this.player.y);
                 this.camera.rotation.set(0, 0, 0);
-                this.camera.rotateY(-(this.cameraYaw || 0) - Math.PI/2);
-                this.camera.rotateX(this.cameraPitch || 0);
+                this.camera.rotateY(-this.cameraYaw - Math.PI/2);
+                this.camera.rotateX(this.cameraPitch);
 
-                // Update Storm (Optimized Scaling)
-                const s = Math.max(1, this.map.stormRadius);
-                this.stormMesh.scale.set(s, 1, s);
+                // Update Storm
+                this.stormMesh.geometry.dispose();
+                this.stormMesh.geometry = new THREE.CylinderGeometry(Math.max(1, this.map.stormRadius), Math.max(1, this.map.stormRadius), 2000, 32, 1, true);
                 this.stormMesh.position.set(this.map.stormCenter.x, 1000, this.map.stormCenter.y);
 
                 // Update Entities
@@ -1764,21 +1752,24 @@
                         const group = new THREE.Group();
                         
                         const bodyGeo = new THREE.CylinderGeometry(e.r, e.r, 30, 16);
-                        const bodyMat = new THREE.MeshLambertMaterial({ color: e.color });
+                        const bodyMat = new THREE.MeshStandardMaterial({ color: e.color, roughness: 0.8, metalness: 0.1 });
                         const body = new THREE.Mesh(bodyGeo, bodyMat);
                         body.position.y = 15;
+                        body.castShadow = true; body.receiveShadow = true;
                         group.add(body);
                         
-                        const headGeo = new THREE.SphereGeometry(e.r * 0.9, 8, 8);
-                        const headMat = new THREE.MeshLambertMaterial({ color: '#fca5a5' });
+                        const headGeo = new THREE.SphereGeometry(e.r * 0.9, 16, 16);
+                        const headMat = new THREE.MeshStandardMaterial({ color: '#fca5a5', roughness: 0.6, metalness: 0 });
                         const head = new THREE.Mesh(headGeo, headMat);
                         head.position.y = 35;
+                        head.castShadow = true; head.receiveShadow = true;
                         group.add(head);
 
                         const visorGeo = new THREE.BoxGeometry(e.r * 1.4, 6, 6);
-                        const visorMat = new THREE.MeshLambertMaterial({ color: '#111827' });
+                        const visorMat = new THREE.MeshStandardMaterial({ color: '#111827', roughness: 0.2, metalness: 0.6 });
                         const visor = new THREE.Mesh(visorGeo, visorMat);
                         visor.position.set(0, 36, e.r * 0.8);
+                        visor.castShadow = true;
                         group.add(visor);
 
                         mesh = group;
@@ -1786,42 +1777,49 @@
                         this.meshes3d.set(e, mesh);
                     }
                     if (mesh) {
-                        const dist = Math.sqrt((e.x - this.player.x)**2 + (e.y - this.player.y)**2);
-                        if (dist > 3500 && e !== this.player) {
-                            mesh.visible = false;
-                        } else {
-                            mesh.visible = true;
-                            const eHeight = (e.dropScale > 1 ? (e.dropScale - 1) * 300 : 0);
-                            mesh.position.set(e.x, eHeight, e.y);
-                            mesh.rotation.y = -e.angle + Math.PI/2;
-                        }
+                        const eHeight = (e.dropScale > 1 ? (e.dropScale - 1) * 300 : 0);
+                        mesh.position.set(e.x, eHeight, e.y);
+                        mesh.rotation.y = -e.angle + Math.PI/2;
                     }
                 });
 
-                // Update Bullets & Projectiles
+                // Update Throwables
+                this.throwables.forEach(t => {
+                    let mesh = this.throwableMeshes.get(t);
+                    if (!mesh) {
+                        const geo = new THREE.SphereGeometry(4, 8, 8);
+                        const mat = new THREE.MeshStandardMaterial({ color: t.type === 'grenade' ? '#166534' : '#9ca3af', roughness: 0.5 });
+                        mesh = new THREE.Mesh(geo, mat);
+                        this.scene.add(mesh);
+                        this.throwableMeshes.set(t, mesh);
+                    }
+                    mesh.position.set(t.x, t.z, t.y);
+                });
+                for (let [t, mesh] of this.throwableMeshes.entries()) {
+                    if (!this.throwables.includes(t)) {
+                        this.scene.remove(mesh);
+                        this.throwableMeshes.delete(t);
+                    }
+                }
+
+                // Update Bullets
+                this.throwables.forEach(t => {
+                    this.ctx.fillStyle = t.type === 'grenade' ? '#166534' : '#9ca3af';
+                    this.ctx.beginPath();
+                    this.ctx.arc(t.x, t.y, 6, 0, Math.PI * 2);
+                    this.ctx.fill();
+                });
+
                 this.bullets.forEach(b => {
                     let mesh = this.bulletMeshes.get(b);
                     if (!mesh) {
-                        let geo;
-                        if (b.isExplosive || b.isFlash) {
-                            geo = b.isExplosive ? new THREE.SphereGeometry(6, 6, 6) : new THREE.CylinderGeometry(4, 4, 10, 6);
-                        } else {
-                            geo = new THREE.SphereGeometry(3, 4, 4);
-                        }
-                        const mat = new THREE.MeshLambertMaterial({ 
-                            color: b.color, 
-                            emissive: b.color, 
-                            emissiveIntensity: 0.5
-                        });
+                        const geo = new THREE.SphereGeometry(3, 4, 4);
+                        const mat = new THREE.MeshBasicMaterial({ color: b.color });
                         mesh = new THREE.Mesh(geo, mat);
-                        mesh.castShadow = true;
                         this.scene.add(mesh);
                         this.bulletMeshes.set(b, mesh);
                     }
                     mesh.position.set(b.x, b.z3d !== undefined ? b.z3d : 30, b.y);
-                    if (b.isFlash || b.isExplosive) {
-                        mesh.rotation.x += 0.1; mesh.rotation.z += 0.1;
-                    }
                 });
                 for (let [b, mesh] of this.bulletMeshes.entries()) {
                     if (!this.bullets.includes(b)) {
@@ -1850,9 +1848,6 @@
                         this.itemMeshes.delete(item);
                     }
                 }
-                } catch (err) {
-                    console.warn("3D Update Error:", err);
-                }
 
                 // Update Crates
                 this.map.crates.forEach(c => {
@@ -1879,17 +1874,17 @@
                         const group = new THREE.Group();
                         const wallH = 90, wallT = 8;
 
-                        const wallMat = new THREE.MeshLambertMaterial({ map: tex.concrete, side: THREE.DoubleSide });
-                        const roofMat = new THREE.MeshLambertMaterial({ map: tex.roof });
-                        const floorMat= new THREE.MeshLambertMaterial({ map: tex.wood, side: THREE.DoubleSide });
-                        const ceilMat = new THREE.MeshLambertMaterial({ color: '#f0ebe0', side: THREE.DoubleSide });
-                        const winMat  = new THREE.MeshLambertMaterial({ color: '#bae6fd', transparent: true, opacity: 0.5, side: THREE.DoubleSide });
-                        const darkWood= new THREE.MeshLambertMaterial({ color: '#92400e' });
-                        const chairMat= new THREE.MeshLambertMaterial({ color: '#1c1917' });
-                        const shelfMat= new THREE.MeshLambertMaterial({ color: '#78350f' });
+                        const wallMat = new THREE.MeshStandardMaterial({ map: tex.concrete, roughness: 0.88, metalness: 0.0, side: THREE.DoubleSide });
+                        const roofMat = new THREE.MeshStandardMaterial({ map: tex.roof,     roughness: 0.85, metalness: 0.0 });
+                        const floorMat= new THREE.MeshStandardMaterial({ map: tex.wood,     roughness: 0.85, metalness: 0.0, side: THREE.DoubleSide });
+                        const ceilMat = new THREE.MeshStandardMaterial({ color: '#f0ebe0',  roughness: 1.0,  metalness: 0.0, side: THREE.DoubleSide });
+                        const winMat  = new THREE.MeshStandardMaterial({ color: '#bae6fd',  roughness: 0.0,  metalness: 0.3, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+                        const darkWood= new THREE.MeshStandardMaterial({ color: '#92400e',  roughness: 0.85, metalness: 0.0 });
+                        const chairMat= new THREE.MeshStandardMaterial({ color: '#1c1917',  roughness: 0.9,  metalness: 0.0 });
+                        const shelfMat= new THREE.MeshStandardMaterial({ color: '#78350f',  roughness: 0.9,  metalness: 0.0 });
 
                         // ── Front wall with door gap ──
-                        const doorW = 50, doorH = 55, segW = (b.w - doorW) / 2;
+                        const doorW = 22, doorH = 55, segW = (b.w - doorW) / 2;
                         [[-b.w/2 + segW/2, segW], [b.w/2 - segW/2, segW]].forEach(([px, sw]) => {
                             const m = new THREE.Mesh(new THREE.BoxGeometry(sw, wallH, wallT), wallMat);
                             m.castShadow = true; m.receiveShadow = true;
@@ -1915,55 +1910,49 @@
                         const ceil = new THREE.Mesh(new THREE.PlaneGeometry(b.w - wallT*2, b.h - wallT*2), ceilMat);
                         ceil.rotation.x = Math.PI/2; ceil.position.set(0, wallH - 1, 0); group.add(ceil);
 
-                        if (!useLowGfx) {
-                            // ── Warm room light ──
-                            const roomLight = new THREE.PointLight(0xfff4d0, 1.0, b.w * 1.8);
-                            roomLight.position.set(0, wallH * 0.75, 0); group.add(roomLight);
-                        }
+                        // ── Warm room light ──
+                        const roomLight = new THREE.PointLight(0xfff4d0, 1.0, b.w * 1.8);
+                        roomLight.position.set(0, wallH * 0.75, 0); group.add(roomLight);
 
                         // ── Roof ──
                         const roof = new THREE.Mesh(new THREE.BoxGeometry(b.w + 14, 10, b.h + 14), roofMat);
                         roof.position.y = wallH + 5; roof.castShadow = true; roof.receiveShadow = true; group.add(roof);
 
-                        if (!useLowGfx) {
-                            // ── Windows ──
-                            [[0, b.h/2, 0], [0, -b.h/2, Math.PI], [b.w/2, 0, Math.PI/2], [-b.w/2, 0, -Math.PI/2]].forEach(([px, pz, ry]) => {
-                                const win = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(b.w, b.h) * 0.25, 22), winMat);
-                                win.position.set(px, 52, pz); win.rotation.y = ry; group.add(win);
-                            });
-                        }
+                        // ── Windows ──
+                        [[0, b.h/2, 0], [0, -b.h/2, Math.PI], [b.w/2, 0, Math.PI/2], [-b.w/2, 0, -Math.PI/2]].forEach(([px, pz, ry]) => {
+                            const win = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(b.w, b.h) * 0.25, 22), winMat);
+                            win.position.set(px, 52, pz); win.rotation.y = ry; group.add(win);
+                        });
 
-                        if (!useLowGfx) {
-                            // ── Table ──
-                            const tableTop = new THREE.Mesh(new THREE.BoxGeometry(40, 4, 25), darkWood);
-                            tableTop.position.set(0, 28, 0); tableTop.castShadow = true; tableTop.receiveShadow = true; group.add(tableTop);
-                            [[16,10],[-16,10],[16,-10],[-16,-10]].forEach(([lx,lz]) => {
-                                const leg = new THREE.Mesh(new THREE.BoxGeometry(4, 28, 4), darkWood);
-                                leg.position.set(lx, 14, lz); leg.castShadow = true; group.add(leg);
-                            });
+                        // ── Table ──
+                        const tableTop = new THREE.Mesh(new THREE.BoxGeometry(40, 4, 25), darkWood);
+                        tableTop.position.set(0, 28, 0); tableTop.castShadow = true; tableTop.receiveShadow = true; group.add(tableTop);
+                        [[16,10],[-16,10],[16,-10],[-16,-10]].forEach(([lx,lz]) => {
+                            const leg = new THREE.Mesh(new THREE.BoxGeometry(4, 28, 4), darkWood);
+                            leg.position.set(lx, 14, lz); leg.castShadow = true; group.add(leg);
+                        });
 
-                            // ── Chairs ──
-                            [-22, 22].forEach(cz => {
-                                const seat = new THREE.Mesh(new THREE.BoxGeometry(18, 4, 16), chairMat);
-                                seat.position.set(0, 18, cz); seat.castShadow = true; seat.receiveShadow = true; group.add(seat);
-                                const back = new THREE.Mesh(new THREE.BoxGeometry(18, 18, 3), chairMat);
-                                back.position.set(0, 27, cz + (cz > 0 ? 7 : -7)); back.castShadow = true; group.add(back);
-                            });
+                        // ── Chairs ──
+                        [-22, 22].forEach(cz => {
+                            const seat = new THREE.Mesh(new THREE.BoxGeometry(18, 4, 16), chairMat);
+                            seat.position.set(0, 18, cz); seat.castShadow = true; seat.receiveShadow = true; group.add(seat);
+                            const back = new THREE.Mesh(new THREE.BoxGeometry(18, 18, 3), chairMat);
+                            back.position.set(0, 27, cz + (cz > 0 ? 7 : -7)); back.castShadow = true; group.add(back);
+                        });
 
-                            // ── Bookshelf ──
-                            const shelf = new THREE.Mesh(new THREE.BoxGeometry(35, 60, 10), shelfMat);
-                            shelf.position.set(b.w * 0.3, 30, -b.h/2 + 9); shelf.castShadow = true; shelf.receiveShadow = true; group.add(shelf);
-                            ['#dc2626','#2563eb','#16a34a','#d97706','#9333ea','#0e7490'].forEach((col, bk) => {
-                                const book = new THREE.Mesh(new THREE.BoxGeometry(5, 14, 8),
-                                    new THREE.MeshLambertMaterial({ color: col }));
-                                book.position.set(b.w * 0.3 - 15 + bk*6, 22 + (bk%2)*18, -b.h/2 + 9.5); group.add(book);
-                            });
+                        // ── Bookshelf ──
+                        const shelf = new THREE.Mesh(new THREE.BoxGeometry(35, 60, 10), shelfMat);
+                        shelf.position.set(b.w * 0.3, 30, -b.h/2 + 9); shelf.castShadow = true; shelf.receiveShadow = true; group.add(shelf);
+                        ['#dc2626','#2563eb','#16a34a','#d97706','#9333ea','#0e7490'].forEach((col, bk) => {
+                            const book = new THREE.Mesh(new THREE.BoxGeometry(5, 14, 8),
+                                new THREE.MeshStandardMaterial({ color: col, roughness: 0.8, metalness: 0 }));
+                            book.position.set(b.w * 0.3 - 15 + bk*6, 22 + (bk%2)*18, -b.h/2 + 9.5); group.add(book);
+                        });
 
-                            // ── Corner crate ──
-                            const scatter = new THREE.Mesh(new THREE.BoxGeometry(20, 20, 20),
-                                new THREE.MeshLambertMaterial({ color: '#d97706' }));
-                            scatter.position.set(-b.w*0.35, 10, -b.h*0.35); scatter.castShadow = true; scatter.receiveShadow = true; group.add(scatter);
-                        }
+                        // ── Corner crate ──
+                        const scatter = new THREE.Mesh(new THREE.BoxGeometry(20, 20, 20),
+                            new THREE.MeshStandardMaterial({ color: '#d97706', roughness: 0.8, metalness: 0.1 }));
+                        scatter.position.set(-b.w*0.35, 10, -b.h*0.35); scatter.castShadow = true; scatter.receiveShadow = true; group.add(scatter);
 
                         group.position.set(b.x + b.w/2, 0, b.y + b.h/2);
                         this.scene.add(group);
@@ -1983,16 +1972,26 @@
                             treeGroup.add(trunk);
 
                             // Foliage (layered cones for pine look)
-                            const fol1 = new THREE.Mesh(new THREE.ConeGeometry(o.r * 1.2, 60, 8), new THREE.MeshLambertMaterial({ color: '#15803d' }));
-                            fol1.position.y = 70; fol1.castShadow = true; treeGroup.add(fol1);
+                            const fol1Geo = new THREE.ConeGeometry(o.r * 1.2, 60, 8);
+                            const fol1Mat = new THREE.MeshLambertMaterial({ color: '#15803d' });
+                            const fol1 = new THREE.Mesh(fol1Geo, fol1Mat);
+                            fol1.position.y = 70;
+                            fol1.castShadow = true;
+                            treeGroup.add(fol1);
 
-                            if (!userData.lowGraphics) {
-                                const fol2 = new THREE.Mesh(new THREE.ConeGeometry(o.r * 0.9, 50, 8), new THREE.MeshLambertMaterial({ color: '#166534' }));
-                                fol2.position.y = 100; fol2.castShadow = true; treeGroup.add(fol2);
+                            const fol2Geo = new THREE.ConeGeometry(o.r * 0.9, 50, 8);
+                            const fol2Mat = new THREE.MeshLambertMaterial({ color: '#166534' });
+                            const fol2 = new THREE.Mesh(fol2Geo, fol2Mat);
+                            fol2.position.y = 100;
+                            fol2.castShadow = true;
+                            treeGroup.add(fol2);
 
-                                const fol3 = new THREE.Mesh(new THREE.ConeGeometry(o.r * 0.6, 40, 8), new THREE.MeshLambertMaterial({ color: '#14532d' }));
-                                fol3.position.y = 125; fol3.castShadow = true; treeGroup.add(fol3);
-                            }
+                            const fol3Geo = new THREE.ConeGeometry(o.r * 0.6, 40, 8);
+                            const fol3Mat = new THREE.MeshLambertMaterial({ color: '#14532d' });
+                            const fol3 = new THREE.Mesh(fol3Geo, fol3Mat);
+                            fol3.position.y = 125;
+                            fol3.castShadow = true;
+                            treeGroup.add(fol3);
 
                             treeGroup.position.set(o.x, 0, o.y);
                             this.scene.add(treeGroup);
@@ -2007,22 +2006,11 @@
                         }
                     });
                     this.buildings3dAdded = true;
-                } catch (err) {
-                    console.error("3D Init Error:", err);
-                    userData.is3D = false;
-                    if (this.canvas3d) this.canvas3d.style.display = 'none';
-                    this.cvs.style.background = '#22c55e';
-                    alert("3D graphics failed to start. Reverting to 2D mode.");
                 }
             }
 
             resize() {
                 this.cvs.width = window.innerWidth; this.cvs.height = window.innerHeight;
-                if (this.renderer && this.camera) {
-                    this.renderer.setSize(window.innerWidth, window.innerHeight);
-                    this.camera.aspect = window.innerWidth / window.innerHeight;
-                    this.camera.updateProjectionMatrix();
-                }
             }
             start(mode = 'solo') {
                 this.running = true; this.state = 'playing';
@@ -2107,8 +2095,7 @@
                 this.supplyDrops = []; this.particles = []; this.dropTimer = 45; // First drop at 45s
             }
             addHitParticle(x, y) {
-                const count = userData.lowGraphics ? 2 : 5;
-                for(let i=0; i<count; i++) {
+                for(let i=0; i<5; i++) {
                     this.particles.push({
                         x, y, 
                         vx: (Math.random()-0.5)*200, vy: (Math.random()-0.5)*200,
@@ -2123,38 +2110,45 @@
                 ent.inventory[ent.selectedSlot] = null;
             }
 
-            // Resolve a circle entity out of all building AABBs (with door gap on front face)
+            // Resolve a circle entity out of all building wall segments (hollow houses)
             resolveWallCollision(e) {
                 if (!this.map) return;
                 this.map.buildings.forEach(b => {
-                    const doorHalfW = 25; // half of 50-unit door gap
-                    const doorH = 55;     // door height clearance
-
-                    // Is entity inside this building's expanded AABB?
-                    const left   = b.x;
-                    const right  = b.x + b.w;
-                    const top    = b.y;         // (z in 3D)
-                    const bottom = b.y + b.h;
+                    const doorW = 22;
+                    const doorHalfW = doorW / 2;
+                    const midX = b.x + b.w / 2;
                     const r = e.r;
 
-                    if (e.x + r > left && e.x - r < right && e.y + r > top && e.y - r < bottom) {
-                        // Entity overlaps — check if they're in the door opening of the front face
-                        const onFrontFace = e.y + r >= bottom - 15 && e.y < bottom + 5;
-                        const inDoorGap   = Math.abs(e.x - (b.x + b.w/2)) < doorHalfW - 2; 
-                        // Note: doorHalfW - 2 ensures they don't clip the door frames too much
-                        if (onFrontFace && inDoorGap) return; // let them through the door
+                    // Walls as segments (A,B coordinates)
+                    const segments = [
+                        { x1: b.x, y1: b.y, x2: b.x + b.w, y2: b.y }, // Back
+                        { x1: b.x, y1: b.y, x2: b.x, y2: b.y + b.h }, // Left
+                        { x1: b.x + b.w, y1: b.y, x2: b.x + b.w, y2: b.y + b.h }, // Right
+                        // Front Split for Door
+                        { x1: b.x, y1: b.y + b.h, x2: midX - doorHalfW, y2: b.y + b.h },
+                        { x1: midX + doorHalfW, y1: b.y + b.h, x2: b.x + b.w, y2: b.y + b.h }
+                    ];
 
-                        // Push out on the axis of smallest overlap
-                        const dLeft   = (e.x + r) - left;
-                        const dRight  = right - (e.x - r);
-                        const dTop    = (e.y + r) - top;
-                        const dBottom = bottom - (e.y - r);
-                        const minD = Math.min(dLeft, dRight, dTop, dBottom);
-                        if (minD === dLeft)   e.x -= dLeft;
-                        else if (minD === dRight)  e.x += dRight - (right - left + 2*r) + (right - left);
-                        else if (minD === dTop)    e.y -= dTop;
-                        else                       e.y += dBottom - (bottom - top + 2*r) + (bottom - top);
-                    }
+                    segments.forEach(seg => {
+                        const dx = seg.x2 - seg.x1;
+                        const dy = seg.y2 - seg.y1;
+                        const l2 = dx * dx + dy * dy;
+                        if (l2 === 0) return;
+                        let t = ((e.x - seg.x1) * dx + (e.y - seg.y1) * dy) / l2;
+                        t = Math.max(0, Math.min(1, t));
+                        const px = seg.x1 + t * dx;
+                        const py = seg.y1 + t * dy;
+
+                        const distSq = (e.x - px) ** 2 + (e.y - py) ** 2;
+                        if (distSq < r * r) {
+                            const dist = Math.sqrt(distSq);
+                            const overlap = r - dist;
+                            const nx = (e.x - px) / dist;
+                            const ny = (e.y - py) / dist;
+                            e.x += nx * overlap;
+                            e.y += ny * overlap;
+                        }
+                    });
                 });
             }
             addKillFeed(msg) {
@@ -2417,20 +2411,15 @@
                                 }
                                 moveX = targetEntity.x - e.x;
                                 moveY = targetEntity.y - e.y;
-                                if (e.cd <= 0) {
-                                    // Chance to throw grenade instead of shooting if we have one
-                                    const thrIdx = e.inventory.findIndex(item => item && (item.type === 'frag grenade' || item.type === 'flashbang'));
-                                    if (thrIdx !== -1 && targetDist < 500 && Math.random() < 0.3) {
-                                        e.selectedSlot = thrIdx;
+                                if (e.cd <= 0) { 
+                                    const itm = e.inventory[e.selectedSlot];
+                                    const w = WEAPONS[itm.type];
+                                    if (w.isThrowable) {
+                                        if (Math.random() < 0.1) e.shoot(this);
                                     } else {
-                                        // Ensure we have a normal weapon selected if we were holding a grenade
-                                        const cur = e.inventory[e.selectedSlot];
-                                        if (cur && (cur.type === 'frag grenade' || cur.type === 'flashbang')) {
-                                            e.selectedSlot = e.inventory.findIndex(w => w && !WEAPONS[w.type].isExplosive && !WEAPONS[w.type].isFlash) || 0;
-                                        }
+                                        e.shoot(this);
                                     }
-                                    e.shoot(this); 
-                                    e.cd = WEAPONS[e.inventory[e.selectedSlot].type].cd * 1.5; 
+                                    e.cd = w.cd * 1.5; 
                                 }
                             } else if (e.team === 'player_team') {
                                 // Follow Teammate State
@@ -2637,67 +2626,83 @@
                     }
                 });
 
+                // Throwables
+                for (let i = this.throwables.length - 1; i >= 0; i--) {
+                    const t = this.throwables[i];
+                    const nextX = t.x + t.vx * dt;
+                    const nextY = t.y + t.vy * dt;
+
+                    // Wall bounce logic
+                    this.map.buildings.forEach(b => {
+                        const doorW = 22, doorHalfW = 11, midX = b.x + b.w / 2;
+                        const segments = [
+                            { x1: b.x, y1: b.y, x2: b.x + b.w, y2: b.y, nx: 0, ny: -1 }, // Back
+                            { x1: b.x, y1: b.y, x2: b.x, y2: b.y + b.h, nx: -1, ny: 0 }, // Left
+                            { x1: b.x + b.w, y1: b.y, x2: b.x + b.w, y2: b.y + b.h, nx: 1, ny: 0 }, // Right
+                            { x1: b.x, y1: b.y + b.h, x2: midX - doorHalfW, y2: b.y + b.h, nx: 0, ny: 1 }, // Front Left
+                            { x1: midX + doorHalfW, y1: b.y + b.h, x2: b.x + b.w, y2: b.y + b.h, nx: 0, ny: 1 } // Front Right
+                        ];
+                        segments.forEach(seg => {
+                            const dx = seg.x2 - seg.x1, dy = seg.y2 - seg.y1, l2 = dx*dx + dy*dy;
+                            let u = ((t.x - seg.x1) * dx + (t.y - seg.y1) * dy) / l2;
+                            u = Math.max(0, Math.min(1, u));
+                            const px = seg.x1 + u * dx, py = seg.y1 + u * dy;
+                            const dist = Math.sqrt((t.x - px)**2 + (t.y - py)**2);
+                            if (dist < 10) { // throwable radius
+                                // Bounce
+                                if (seg.nx !== 0) t.vx *= -0.6;
+                                if (seg.ny !== 0) t.vy *= -0.6;
+                                t.x += seg.nx * 5; t.y += seg.ny * 5; // push out
+                            }
+                        });
+                    });
+
+                    t.x += t.vx * dt; t.y += t.vy * dt;
+                    t.vz -= 600 * dt; // gravity
+                    t.z += t.vz * dt;
+                    if (t.z < 0) { t.z = 0; t.vz *= -0.4; t.vx *= 0.8; t.vy *= 0.8; } // bounce ground
+                    t.timer -= dt;
+
+                    if (t.timer <= 0) {
+                        // EXPLODE
+                        if (t.type === 'grenade') {
+                            this.entities.forEach(ent => {
+                                const d = Math.sqrt((ent.x - t.x) ** 2 + (ent.y - t.y) ** 2);
+                                if (d < 250) {
+                                    const dmg = 85 * (1 - d/250);
+                                    ent.takeDamage(dmg, t.owner, this);
+                                }
+                            });
+                            // Effects
+                            for(let j=0; j<20; j++) this.particles.push({ x: t.x, y: t.y, vx: (Math.random()-0.5)*500, vy: (Math.random()-0.5)*500, life: 0.8, color: '#f97316' });
+                            audio.playTone(100, 0.5, 'square', 1.0);
+                        } else if (t.type === 'flashbang') {
+                            const distToPlayer = Math.sqrt((this.player.x - t.x) ** 2 + (this.player.y - t.y) ** 2);
+                            if (distToPlayer < 800) {
+                                // REALLY BRIGHT
+                                const overlay = document.getElementById('flash-overlay');
+                                overlay.style.transition = 'none';
+                                overlay.style.opacity = '1';
+                                setTimeout(() => {
+                                    overlay.style.transition = 'opacity 5s ease-out';
+                                    overlay.style.opacity = '0';
+                                }, 50);
+                            }
+                            audio.playTone(800, 1.5, 'sine', 0.5);
+                        }
+                        this.throwables.splice(i, 1);
+                    }
+                }
+
                 // Bullets
                 for (let i = this.bullets.length - 1; i >= 0; i--) {
                     const b = this.bullets[i];
                     b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
                     // 3D vertical movement
                     if (b.vz3d !== undefined) {
-                        if (b.gravity) b.vz3d -= b.gravity * 20; // 3D Gravity
                         b.z3d = (b.z3d || 30) + b.vz3d * dt;
-                        
-                        if (b.z3d <= 5) { // Bouncing off ground
-                            b.z3d = 5;
-                            b.vz3d = -b.vz3d * 0.4; // Bounce
-                            b.vx *= 0.7; b.vy *= 0.7; // Friction on ground
-                        }
-                    }
-                    if (b.friction) {
-                        b.vx *= b.friction;
-                        b.vy *= b.friction;
-                    }
-
-                    // Expired logic for flash/grenades
-                    if (b.life <= 0) {
-                        if (b.isExplosive) {
-                            audio.playNoise(0.5, 1.0, 400); // BOOM
-                            this.particles.push({x: b.x, y: b.y, vx: 0, vy: 0, life: 0.4, color: '#f97316', scale: 10});
-                            this.entities.forEach(ent => {
-                                const dist = Math.sqrt((b.x - ent.x)**2 + (b.y - ent.y)**2);
-                                if (dist < b.radius) {
-                                    const falloff = 1 - (dist / b.radius);
-                                    ent.takeDamage(b.dmg * falloff, b.owner, this);
-                                }
-                            });
-                        }
-                        if (b.isFlash) {
-                            // High-pitched ringing sound
-                            audio.playTone(3000, 2.0, 'sine', 0.5); 
-                            audio.playNoise(0.2, 0.8, 2000);
-                            
-                            const dist = Math.sqrt((b.x - this.player.x)**2 + (b.y - this.player.y)**2);
-                            if (dist < b.radius) {
-                                const flash = document.getElementById('flash-overlay');
-                                flash.style.transition = 'none';
-                                flash.style.opacity = '1';
-                                // Really bright white-out effect
-                                flash.style.backgroundColor = '#ffffff';
-                                setTimeout(() => {
-                                    flash.style.transition = 'opacity 5s ease-out';
-                                    flash.style.opacity = '0';
-                                }, 100);
-                            }
-                            // Also flash bots? (simple stun)
-                            this.entities.forEach(ent => {
-                                if (ent.isBot) {
-                                    const d = Math.sqrt((b.x - ent.x)**2 + (b.y - ent.y)**2);
-                                    if (d < b.radius) {
-                                        ent.cd = 4.0; // Stun for 4s
-                                        this.particles.push({x: ent.x, y: ent.y - 20, vx: 0, vy: 0, life: 1, color: '#fff', scale: 5});
-                                    }
-                                }
-                            });
-                        }
+                        // Kill bullet if it hits the ground
+                        if (b.z3d <= 0) { b.life = 0; }
                     }
 
                     // Wall (building) collision — bullets stop at walls in 3D
@@ -2889,6 +2894,13 @@
                     this.ctx.globalAlpha = p.life * 3;
                     this.ctx.beginPath(); this.ctx.arc(p.x, p.y, 3, 0, Math.PI*2); this.ctx.fill();
                     this.ctx.globalAlpha = 1.0;
+                });
+
+                this.throwables.forEach(t => {
+                    this.ctx.fillStyle = t.type === 'grenade' ? '#166534' : '#9ca3af';
+                    this.ctx.beginPath();
+                    this.ctx.arc(t.x, t.y, 6, 0, Math.PI * 2);
+                    this.ctx.fill();
                 });
 
                 this.bullets.forEach(b => { 
