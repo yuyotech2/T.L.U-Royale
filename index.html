@@ -562,16 +562,6 @@
             font-size: 18px;
             font-weight: 900;
         }
-        #perspective-btn {
-            border: 3px solid var(--accent) !important;
-            box-shadow: 0 0 15px var(--accent);
-            animation: pulse-border 2s infinite;
-        }
-        @keyframes pulse-border {
-            0% { box-shadow: 0 0 5px var(--accent); }
-            50% { box-shadow: 0 0 20px var(--accent); }
-            100% { box-shadow: 0 0 5px var(--accent); }
-        }
     </style>
 </head>
 
@@ -750,12 +740,9 @@
                 <div class="settings-grid" id="kb-container">
                     <!-- Dynamic keybinds here -->
                 </div>
-                <div style="margin-top:20px; display:flex; flex-direction:column; gap:10px; padding:10px; background:rgba(255,255,255,0.05); border-radius:8px;">
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <label style="font-weight:900; flex:1;">LOW GRAPHICS MODE</label>
-                        <input type="checkbox" id="low-gfx-toggle" style="width:25px; height:25px; cursor:pointer;">
-                    </div>
-                    <button id="btn-reset-gfx" class="btn-secondary" style="font-size: 12px; padding: 5px;">RESET GRAPHICS (FIX BLACK SCREEN)</button>
+                <div style="margin-top:20px; display:flex; align-items:center; gap:10px; padding:10px; background:rgba(255,255,255,0.05); border-radius:8px;">
+                    <label style="font-weight:900; flex:1;">LOW GRAPHICS MODE (FOR LAPTOPS)</label>
+                    <input type="checkbox" id="low-gfx-toggle" style="width:25px; height:25px; cursor:pointer;">
                 </div>
                 <button id="close-settings" class="btn-primary" style="margin-top:30px; width:100%;">CLOSE &
                     SAVE</button>
@@ -984,7 +971,12 @@
 
         function saveGame() { localStorage.setItem(SAVE_KEY, JSON.stringify(userData)); }
         function loadGame() {
-            const saved = localStorage.getItem(SAVE_KEY);
+            const keys = ['tlu_royale_save_v3', 'TLU_ROYALE_SAVE', 'tlu_royale_save', 'prime_prominence_save', 'tlu_save'];
+            let saved = null;
+            for(const k of keys) {
+                const s = localStorage.getItem(k);
+                if(s) { saved = s; break; }
+            }
             if (saved) {
                 const parsed = JSON.parse(saved);
                 const keybinds = { ...userData.keybinds, ...(parsed.keybinds || {}) };
@@ -1441,7 +1433,10 @@
                 this.running = false; this.state = 'lobby'; this.droppedItems = [];
                 this.supplyDrops = [];
                 this.particles = [];
+                this.cameraYaw = 0;
+                this.cameraPitch = 0;
                 this.dropTimer = 0;
+                window.addEventListener('resize', () => this.resize());
             }
 
             normalizeAngle(a) {
@@ -1602,6 +1597,7 @@
                     this.cvs.style.backgroundColor = 'transparent';
                     this.cvs.style.backgroundImage = 'none';
                     if (this.scene) return;
+                    this.resize();
 
                 // ─── Renderer (Optimized) ───────────────────────────────
                 this.scene = new THREE.Scene();
@@ -1616,24 +1612,8 @@
                 this.renderer.setPixelRatio(useLowGfx ? 1 : Math.min(window.devicePixelRatio, 1.5));
                 
                 this.renderer.shadowMap.enabled = false;
-                this.renderer.toneMapping = THREE.NoToneMapping;
                 this.renderer.outputEncoding = THREE.LinearEncoding;
-                this.scene.fog = new THREE.FogExp2(0xb0d4f1, 0.00015);
-
-                // ─── Sky sphere (gradient) ─────────────────────────────────
-                const skyGeo = new THREE.SphereGeometry(18000, 16, 8);
-                const skyCanvas = document.createElement('canvas');
-                skyCanvas.width = 2; skyCanvas.height = 512;
-                const skyCtx = skyCanvas.getContext('2d');
-                const grad = skyCtx.createLinearGradient(0, 0, 0, 512);
-                grad.addColorStop(0,    '#1a3a6e');
-                grad.addColorStop(0.35, '#3674b8');
-                grad.addColorStop(0.65, '#7ab8e8');
-                grad.addColorStop(1,    '#c8e6f5');
-                skyCtx.fillStyle = grad; skyCtx.fillRect(0, 0, 2, 512);
-                const skyTex = new THREE.CanvasTexture(skyCanvas);
-                const skyMat = new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide });
-                this.scene.add(new THREE.Mesh(skyGeo, skyMat));
+                this.scene.background = new THREE.Color(0xb0d4f1);
 
                 // ─── Procedural Textures ───────────────────────────────────
                 function makeTexture(drawFn, w=512, h=512) {
@@ -1693,12 +1673,11 @@
                 this._tex = { grass: grassTex, concrete: concreteTex, wood: woodTex, roof: roofTex };
 
                 // ─── Ground ────────────────────────────────────────────────
-                const groundGeo = new THREE.PlaneGeometry(this.map.w + 4000, this.map.h + 4000, 1, 1);
-                const groundMat = new THREE.MeshLambertMaterial({ map: grassTex });
+                const groundGeo = new THREE.PlaneGeometry(this.map.w + 8000, this.map.h + 8000, 1, 1);
+                const groundMat = new THREE.MeshLambertMaterial({ color: '#22c55e' });
                 const ground = new THREE.Mesh(groundGeo, groundMat);
                 ground.rotation.x = -Math.PI / 2;
                 ground.position.set(this.map.w/2, 0, this.map.h/2);
-                ground.receiveShadow = true;
                 this.scene.add(ground);
 
                 // ─── Lighting ──────────────────────────────────────────────
@@ -1762,10 +1741,10 @@
                     if (!this.scene || !this.camera) return;
 
                 const playerHeight = 30 + (this.player.dropScale > 1 ? (this.player.dropScale - 1) * 300 : 0);
-                this.camera.position.set(this.player.x, playerHeight, this.player.y);
+                this.camera.position.set(this.player.x || 0, playerHeight || 30, this.player.y || 0);
                 this.camera.rotation.set(0, 0, 0);
-                this.camera.rotateY(-this.cameraYaw - Math.PI/2);
-                this.camera.rotateX(this.cameraPitch);
+                this.camera.rotateY(-(this.cameraYaw || 0) - Math.PI/2);
+                this.camera.rotateX(this.cameraPitch || 0);
 
                 // Update Storm (Optimized Scaling)
                 const s = Math.max(1, this.map.stormRadius);
