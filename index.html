@@ -802,8 +802,6 @@
 
         <canvas id="game-canvas-3d" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; display: none;"></canvas>
         <canvas id="game-canvas" style="position: relative; z-index: 2; pointer-events: auto;"></canvas>
-        <div id="debug-info" style="position: absolute; top: 10px; left: 10px; color: #4ade80; font-family: monospace; z-index: 100; font-weight: bold; pointer-events: none; display: none;"></div>
-        <button id="safety-btn" style="position: absolute; top: 10px; right: 10px; z-index: 1000; padding: 10px; background: #f59e0b; color: #fff; border: none; border-radius: 8px; font-weight: 900; cursor: pointer; box-shadow: 0 0 10px rgba(0,0,0,0.5);">FIX BLACK SCREEN</button>
         <div id="flash-overlay" style="opacity:0; pointer-events:none;"></div>
     </div>
 
@@ -1108,20 +1106,6 @@
         });
 
         document.getElementById('close-cosmetics').onclick = () => cosModal.style.display = 'none';
-
-        document.getElementById('btn-reset-gfx').onclick = () => {
-            userData.lowGraphics = true;
-            userData.is3D = false;
-            saveGame();
-            location.reload();
-        };
-
-        document.getElementById('safety-btn').onclick = () => {
-            userData.is3D = false;
-            userData.lowGraphics = true;
-            saveGame();
-            location.reload();
-        };
 
         document.getElementById('close-settings').onclick = () => {
             userData.nickname = document.getElementById('player-nick').value;
@@ -1626,18 +1610,15 @@
                 const useLowGfx = userData.lowGraphics;
                 this.renderer = new THREE.WebGLRenderer({ 
                     canvas: this.canvas3d, 
-                    antialias: !useLowGfx,
-                    powerPreference: "high-performance"
+                    antialias: false
                 });
                 this.renderer.setSize(window.innerWidth, window.innerHeight);
                 this.renderer.setPixelRatio(useLowGfx ? 1 : Math.min(window.devicePixelRatio, 1.5));
                 
-                this.renderer.shadowMap.enabled = !useLowGfx;
-                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-                this.renderer.toneMapping = useLowGfx ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
-                this.renderer.toneMappingExposure = 0.85;
-                this.renderer.outputEncoding = THREE.sRGBEncoding;
-                this.scene.fog = new THREE.FogExp2(0xb0d4f1, useLowGfx ? 0.0001 : 0.00025);
+                this.renderer.shadowMap.enabled = false;
+                this.renderer.toneMapping = THREE.NoToneMapping;
+                this.renderer.outputEncoding = THREE.LinearEncoding;
+                this.scene.fog = new THREE.FogExp2(0xb0d4f1, 0.00015);
 
                 // ─── Sky sphere (gradient) ─────────────────────────────────
                 const skyGeo = new THREE.SphereGeometry(18000, 16, 8);
@@ -1713,7 +1694,7 @@
 
                 // ─── Ground ────────────────────────────────────────────────
                 const groundGeo = new THREE.PlaneGeometry(this.map.w + 4000, this.map.h + 4000, 1, 1);
-                const groundMat = new THREE.MeshStandardMaterial({ map: grassTex, roughness: 0.95, metalness: 0 });
+                const groundMat = new THREE.MeshLambertMaterial({ map: grassTex });
                 const ground = new THREE.Mesh(groundGeo, groundMat);
                 ground.rotation.x = -Math.PI / 2;
                 ground.position.set(this.map.w/2, 0, this.map.h/2);
@@ -1767,7 +1748,7 @@
 
                 this.stormMesh = new THREE.Mesh(
                     new THREE.CylinderGeometry(1, 1, 2000, 32, 1, true),
-                    new THREE.MeshStandardMaterial({ color: '#7c3aed', transparent: true, opacity: 0.25, side: THREE.DoubleSide, roughness: 1, emissive: '#4c1d95', emissiveIntensity: 0.5 })
+                    new THREE.MeshLambertMaterial({ color: '#7c3aed', transparent: true, opacity: 0.25, side: THREE.DoubleSide, emissive: '#4c1d95', emissiveIntensity: 0.5 })
                 );
                 this.scene.add(this.stormMesh);
 
@@ -1779,8 +1760,6 @@
             update3D() {
                 try {
                     if (!this.scene || !this.camera) return;
-                    if (document.getElementById('debug-info').style.display === 'none') document.getElementById('debug-info').style.display = 'block';
-                document.getElementById('debug-info').innerText = `3D: ACTIVE | ENT: ${this.entities.length} | STORM: ${Math.floor(this.map.stormRadius)}`;
 
                 const playerHeight = 30 + (this.player.dropScale > 1 ? (this.player.dropScale - 1) * 300 : 0);
                 this.camera.position.set(this.player.x, playerHeight, this.player.y);
@@ -1806,24 +1785,21 @@
                         const group = new THREE.Group();
                         
                         const bodyGeo = new THREE.CylinderGeometry(e.r, e.r, 30, 16);
-                        const bodyMat = new THREE.MeshStandardMaterial({ color: e.color, roughness: 0.8, metalness: 0.1 });
+                        const bodyMat = new THREE.MeshLambertMaterial({ color: e.color });
                         const body = new THREE.Mesh(bodyGeo, bodyMat);
                         body.position.y = 15;
-                        body.castShadow = true; body.receiveShadow = true;
                         group.add(body);
                         
                         const headGeo = new THREE.SphereGeometry(e.r * 0.9, 8, 8);
-                        const headMat = new THREE.MeshStandardMaterial({ color: '#fca5a5', roughness: 0.6, metalness: 0 });
+                        const headMat = new THREE.MeshLambertMaterial({ color: '#fca5a5' });
                         const head = new THREE.Mesh(headGeo, headMat);
                         head.position.y = 35;
-                        head.castShadow = true; head.receiveShadow = true;
                         group.add(head);
 
                         const visorGeo = new THREE.BoxGeometry(e.r * 1.4, 6, 6);
-                        const visorMat = new THREE.MeshStandardMaterial({ color: '#111827', roughness: 0.2, metalness: 0.6 });
+                        const visorMat = new THREE.MeshLambertMaterial({ color: '#111827' });
                         const visor = new THREE.Mesh(visorGeo, visorMat);
                         visor.position.set(0, 36, e.r * 0.8);
-                        visor.castShadow = true;
                         group.add(visor);
 
                         mesh = group;
@@ -1853,12 +1829,10 @@
                         } else {
                             geo = new THREE.SphereGeometry(3, 4, 4);
                         }
-                        const mat = new THREE.MeshStandardMaterial({ 
+                        const mat = new THREE.MeshLambertMaterial({ 
                             color: b.color, 
                             emissive: b.color, 
-                            emissiveIntensity: (b.isExplosive || b.isFlash) ? 1 : 0.5,
-                            roughness: 0.3,
-                            metalness: 0.8
+                            emissiveIntensity: 0.5
                         });
                         mesh = new THREE.Mesh(geo, mat);
                         mesh.castShadow = true;
@@ -1926,14 +1900,14 @@
                         const group = new THREE.Group();
                         const wallH = 90, wallT = 8;
 
-                        const wallMat = new THREE.MeshStandardMaterial({ map: tex.concrete, roughness: 0.88, metalness: 0.0, side: THREE.DoubleSide });
-                        const roofMat = new THREE.MeshStandardMaterial({ map: tex.roof,     roughness: 0.85, metalness: 0.0 });
-                        const floorMat= new THREE.MeshStandardMaterial({ map: tex.wood,     roughness: 0.85, metalness: 0.0, side: THREE.DoubleSide });
-                        const ceilMat = new THREE.MeshStandardMaterial({ color: '#f0ebe0',  roughness: 1.0,  metalness: 0.0, side: THREE.DoubleSide });
-                        const winMat  = new THREE.MeshStandardMaterial({ color: '#bae6fd',  roughness: 0.0,  metalness: 0.3, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
-                        const darkWood= new THREE.MeshStandardMaterial({ color: '#92400e',  roughness: 0.85, metalness: 0.0 });
-                        const chairMat= new THREE.MeshStandardMaterial({ color: '#1c1917',  roughness: 0.9,  metalness: 0.0 });
-                        const shelfMat= new THREE.MeshStandardMaterial({ color: '#78350f',  roughness: 0.9,  metalness: 0.0 });
+                        const wallMat = new THREE.MeshLambertMaterial({ map: tex.concrete, side: THREE.DoubleSide });
+                        const roofMat = new THREE.MeshLambertMaterial({ map: tex.roof });
+                        const floorMat= new THREE.MeshLambertMaterial({ map: tex.wood, side: THREE.DoubleSide });
+                        const ceilMat = new THREE.MeshLambertMaterial({ color: '#f0ebe0', side: THREE.DoubleSide });
+                        const winMat  = new THREE.MeshLambertMaterial({ color: '#bae6fd', transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+                        const darkWood= new THREE.MeshLambertMaterial({ color: '#92400e' });
+                        const chairMat= new THREE.MeshLambertMaterial({ color: '#1c1917' });
+                        const shelfMat= new THREE.MeshLambertMaterial({ color: '#78350f' });
 
                         // ── Front wall with door gap ──
                         const doorW = 50, doorH = 55, segW = (b.w - doorW) / 2;
@@ -2002,13 +1976,13 @@
                             shelf.position.set(b.w * 0.3, 30, -b.h/2 + 9); shelf.castShadow = true; shelf.receiveShadow = true; group.add(shelf);
                             ['#dc2626','#2563eb','#16a34a','#d97706','#9333ea','#0e7490'].forEach((col, bk) => {
                                 const book = new THREE.Mesh(new THREE.BoxGeometry(5, 14, 8),
-                                    new THREE.MeshStandardMaterial({ color: col, roughness: 0.8, metalness: 0 }));
+                                    new THREE.MeshLambertMaterial({ color: col }));
                                 book.position.set(b.w * 0.3 - 15 + bk*6, 22 + (bk%2)*18, -b.h/2 + 9.5); group.add(book);
                             });
 
                             // ── Corner crate ──
                             const scatter = new THREE.Mesh(new THREE.BoxGeometry(20, 20, 20),
-                                new THREE.MeshStandardMaterial({ color: '#d97706', roughness: 0.8, metalness: 0.1 }));
+                                new THREE.MeshLambertMaterial({ color: '#d97706' }));
                             scatter.position.set(-b.w*0.35, 10, -b.h*0.35); scatter.castShadow = true; scatter.receiveShadow = true; group.add(scatter);
                         }
 
