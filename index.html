@@ -1823,15 +1823,63 @@
                 this.droppedItems.forEach(item => {
                     let mesh = this.itemMeshes.get(item);
                     if (!mesh) {
-                        const geo = new THREE.BoxGeometry(10, 10, 10);
-                        const mat = new THREE.MeshLambertMaterial({ color: RARITIES[item.rarity]?.color || '#ffffff' });
-                        mesh = new THREE.Mesh(geo, mat);
-                        mesh.castShadow = true;
+                        const group = new THREE.Group();
+                        const color = RARITIES[item.rarity]?.color || '#ffffff';
+                        const metalMat = new THREE.MeshStandardMaterial({ color: '#334155', metalness: 0.8, roughness: 0.2 });
+                        const rarityMat = new THREE.MeshStandardMaterial({ color: color, emissive: color, emissiveIntensity: 0.4, roughness: 0.5 });
+                        
+                        // Procedural Weapon Meshes
+                        if (item.type === 'ak-47' || item.type === 'burst rifle') {
+                            const barrel = new THREE.Mesh(new THREE.BoxGeometry(32, 3, 3), metalMat);
+                            barrel.position.x = 10; group.add(barrel);
+                            const body = new THREE.Mesh(new THREE.BoxGeometry(16, 6, 5), rarityMat);
+                            group.add(body);
+                            const stock = new THREE.Mesh(new THREE.BoxGeometry(10, 6, 4), metalMat);
+                            stock.position.x = -12; group.add(stock);
+                        } else if (item.type === 'smg') {
+                            const body = new THREE.Mesh(new THREE.BoxGeometry(14, 8, 6), rarityMat);
+                            group.add(body);
+                            const barrel = new THREE.Mesh(new THREE.BoxGeometry(12, 4, 4), metalMat);
+                            barrel.position.x = 12; group.add(barrel);
+                            const mag = new THREE.Mesh(new THREE.BoxGeometry(4, 10, 4), metalMat);
+                            mag.position.set(2, -4, 0); group.add(mag);
+                        } else if (item.type === 'pump shotgun') {
+                            const barrel = new THREE.Mesh(new THREE.BoxGeometry(38, 5, 5), metalMat);
+                            barrel.position.x = 10; group.add(barrel);
+                            const body = new THREE.Mesh(new THREE.BoxGeometry(22, 7, 6), rarityMat);
+                            group.add(body);
+                        } else if (item.type === 'heavy sniper') {
+                            const barrel = new THREE.Mesh(new THREE.BoxGeometry(55, 2, 2), metalMat);
+                            barrel.position.x = 22; group.add(barrel);
+                            const body = new THREE.Mesh(new THREE.BoxGeometry(28, 8, 5), rarityMat);
+                            group.add(body);
+                            const scope = new THREE.Mesh(new THREE.BoxGeometry(12, 4, 4), metalMat);
+                            scope.position.set(2, 6, 0); group.add(scope);
+                        } else if (item.type === 'pistol') {
+                            const body = new THREE.Mesh(new THREE.BoxGeometry(12, 5, 4), rarityMat);
+                            group.add(body);
+                            const grip = new THREE.Mesh(new THREE.BoxGeometry(4, 8, 4), metalMat);
+                            grip.position.set(-3, -4, 0); group.add(grip);
+                        } else if (item.type === 'grenade' || item.type === 'flashbang') {
+                            const body = new THREE.Mesh(new THREE.SphereGeometry(8, 12, 12), rarityMat);
+                            group.add(body);
+                            const pin = new THREE.Mesh(new THREE.TorusGeometry(3, 1, 8, 16), metalMat);
+                            pin.position.y = 8; group.add(pin);
+                        } else {
+                            // Consumables (Box with cross or glow)
+                            const body = new THREE.Mesh(new THREE.BoxGeometry(14, 14, 14), rarityMat);
+                            group.add(body);
+                        }
+                        
+                        const glow = new THREE.Mesh(new THREE.SphereGeometry(25, 16, 16), new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.15 }));
+                        group.add(glow);
+                        
+                        mesh = group;
                         this.scene.add(mesh);
                         this.itemMeshes.set(item, mesh);
                     }
-                    mesh.position.set(item.x, 5, item.y);
-                    mesh.rotation.y += 0.05;
+                    mesh.position.set(item.x, 12 + Math.sin(Date.now()*0.004)*4, item.y);
+                    mesh.rotation.y += 0.02;
                 });
                 for (let [item, mesh] of this.itemMeshes.entries()) {
                     if (!this.droppedItems.includes(item)) {
@@ -1849,10 +1897,28 @@
                         return;
                     }
                     if (c.alive && !mesh) {
-                        const geo = new THREE.BoxGeometry(40, 40, 40);
-                        const mat = new THREE.MeshLambertMaterial({ color: '#facc15' });
-                        mesh = new THREE.Mesh(geo, mat);
-                        mesh.castShadow = true; mesh.receiveShadow = true;
+                        const group = new THREE.Group();
+                        const isMed = c.type === 'medical';
+                        const color = isMed ? '#94a3b8' : '#78350f';
+                        const body = new THREE.Mesh(new THREE.BoxGeometry(40, 40, 40), new THREE.MeshStandardMaterial({ 
+                            color: color, roughness: 0.7, metalness: 0.3 
+                        }));
+                        body.castShadow = true; body.receiveShadow = true;
+                        group.add(body);
+                        
+                        // Metallic straps
+                        const trim = new THREE.Mesh(new THREE.BoxGeometry(42, 6, 42), new THREE.MeshStandardMaterial({ color: '#334155', metalness: 0.8 }));
+                        group.add(trim);
+                        
+                        // Rarity Light
+                        const rColor = RARITIES[c.rarity].color;
+                        const light = new THREE.Mesh(new THREE.SphereGeometry(6, 8, 8), new THREE.MeshStandardMaterial({ 
+                            color: rColor, emissive: rColor, emissiveIntensity: 1.2
+                        }));
+                        light.position.y = 22;
+                        group.add(light);
+                        
+                        mesh = group;
                         this.scene.add(mesh);
                         this.crateMeshes.set(c, mesh);
                     }
@@ -2279,7 +2345,7 @@
                                 }
                                 const m = Math.sqrt(moveX * moveX + moveY * moveY);
                                 const speedMult = this.joystick.active ? 1 : (1 / m);
-                             e.x += (moveX * speedMult) * 350 * dt; e.y += (moveY * speedMult) * 350 * dt;
+                              e.x += (moveX * speedMult) * 260 * dt; e.y += (moveY * speedMult) * 260 * dt;
                                 this.resolveWallCollision(e);
                                 if (Math.random() < 0.15) audio.walk();
                             }
@@ -2930,7 +2996,17 @@
                                 <path d="M4 12H14L16 10H20V14H16L14 12H4V12Z" fill="#f97316"/>
                                 <circle cx="18" cy="12" r="3" fill="#ef4444" opacity="0.6"/>
                                 <path d="M17 9L19 7M17 15L19 17" stroke="#fff" stroke-width="1.5"/>
-                                </svg>`
+                                </svg>`,
+                            'grenade': `<svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+                                <circle cx="12" cy="14" r="7" fill="#4ade80" opacity="0.8"/>
+                                <rect width="4" height="6" x="10" y="4" rx="1" fill="#166534"/>
+                                <path d="M12 4V2" stroke="#fff" stroke-width="2"/>
+                                </svg>`,
+                            'flashbang': `<svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+                                <rect width="10" height="14" x="7" y="6" rx="2" fill="#fff" opacity="0.8"/>
+                                <rect width="6" height="4" x="9" y="3" rx="1" fill="#d1d5db"/>
+                                <circle cx="12" cy="13" r="3" fill="#3b82f6"/>
+                                </svg>`,
                         };
                         icon.innerHTML = iconMap[wp.type] || '';
                         indicator.style.background = RARITIES[wp.rarity].color;
@@ -2942,6 +3018,33 @@
                         indicator.style.background = 'transparent';
                     }
                 });
+
+                // Interaction Prompts (3D/2D)
+                let prompt = null;
+                this.map.crates.forEach(c => {
+                    if (c.alive && Math.sqrt((c.x - this.player.x) ** 2 + (c.y - this.player.y) ** 2) < 85) prompt = `OPEN ${c.rarity.toUpperCase()} CRATE`;
+                });
+                this.droppedItems.forEach(item => {
+                    if (Math.sqrt((item.x - this.player.x) ** 2 + (item.y - this.player.y) ** 2) < 100) prompt = `PICK UP ${item.rarity.toUpperCase()} ${item.type.toUpperCase()}`;
+                });
+                this.supplyDrops.forEach(d => {
+                    if (d.landed && Math.sqrt((d.x-this.player.x)**2 + (d.y-this.player.y)**2) < 85) prompt = `OPEN SUPPLY DROP`;
+                });
+
+                if (prompt) {
+                    ctx.save();
+                    const msg = `PRESS [${userData.keybinds.interact.toUpperCase()}] TO ${prompt}`;
+                    ctx.font = '900 24px Outfit';
+                    const tw = ctx.measureText(msg).width;
+                    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+                    ctx.fillRect(this.cvs.width/2 - tw/2 - 20, this.cvs.height/2 + 60, tw + 40, 45);
+                    ctx.fillStyle = '#4ade80'; // Primary green
+                    ctx.fillRect(this.cvs.width/2 - tw/2 - 20, this.cvs.height/2 + 101, tw + 40, 4); // Underline
+                    ctx.fillStyle = '#fff';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(msg, this.cvs.width/2, this.cvs.height/2 + 92);
+                    ctx.restore();
+                }
 
                 // Bars (Fortnite Style)
                 const barWidth = 300;
