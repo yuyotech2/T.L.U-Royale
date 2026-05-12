@@ -1579,15 +1579,15 @@
                 // ─── Renderer (PBR quality) ───────────────────────────────
                 this.scene = new THREE.Scene();
                 this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 1, 20000);
-                this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas3d, antialias: true });
+                this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas3d, antialias: true, powerPreference: "high-performance" });
                 this.renderer.setSize(window.innerWidth, window.innerHeight);
-                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // Capped for performance
                 this.renderer.shadowMap.enabled = true;
-                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                this.renderer.shadowMap.type = THREE.PCFShadowMap; // Faster than PCFSoft
                 this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
                 this.renderer.toneMappingExposure = 0.85;
                 this.renderer.outputEncoding = THREE.sRGBEncoding;
-                this.scene.fog = new THREE.FogExp2(0xb0d4f1, 0.00025);
+                this.scene.fog = new THREE.FogExp2(0xb0d4f1, 0.00015);
 
                 // ─── Sky sphere (gradient) ─────────────────────────────────
                 const skyGeo = new THREE.SphereGeometry(18000, 32, 16);
@@ -1711,8 +1711,8 @@
                 this.crateMeshes = new Map();
 
                 this.stormMesh = new THREE.Mesh(
-                    new THREE.CylinderGeometry(this.map.stormRadius, this.map.stormRadius, 2000, 32, 1, true),
-                    new THREE.MeshStandardMaterial({ color: '#7c3aed', transparent: true, opacity: 0.25, side: THREE.DoubleSide, roughness: 1, emissive: '#4c1d95', emissiveIntensity: 0.5 })
+                    new THREE.CylinderGeometry(1, 1, 2000, 32, 1, true),
+                    new THREE.MeshStandardMaterial({ color: '#7c3aed', transparent: true, opacity: 0.2, side: THREE.DoubleSide, roughness: 1, emissive: '#4c1d95', emissiveIntensity: 0.5 })
                 );
                 this.scene.add(this.stormMesh);
 
@@ -1728,9 +1728,9 @@
                 this.camera.rotateY(-this.cameraYaw - Math.PI/2);
                 this.camera.rotateX(this.cameraPitch);
 
-                // Update Storm
-                this.stormMesh.geometry.dispose();
-                this.stormMesh.geometry = new THREE.CylinderGeometry(Math.max(1, this.map.stormRadius), Math.max(1, this.map.stormRadius), 2000, 32, 1, true);
+                // Update Storm (Optimized scaling instead of disposal)
+                const rad = Math.max(1, this.map.stormRadius);
+                this.stormMesh.scale.set(rad, 1, rad);
                 this.stormMesh.position.set(this.map.stormCenter.x, 1000, this.map.stormCenter.y);
 
                 // Update Entities
@@ -1813,6 +1813,8 @@
                 for (let [b, mesh] of this.bulletMeshes.entries()) {
                     if (!this.bullets.includes(b)) {
                         this.scene.remove(mesh);
+                        mesh.geometry.dispose();
+                        mesh.material.dispose();
                         this.bulletMeshes.delete(b);
                     }
                 }
@@ -2099,37 +2101,36 @@
                 ent.inventory[ent.selectedSlot] = null;
             }
 
-            // Resolve a circle entity out of all building AABBs (with door gap on front face)
+            // Resolve a circle entity out of building walls (hollow interiors)
             resolveWallCollision(e) {
                 if (!this.map) return;
+                const wallT = 12; // Wall thickness
+                const doorW = 28; // Door width
                 this.map.buildings.forEach(b => {
-                    const doorHalfW = 11; // half of 22-unit door gap
-                    const doorH = 55;     // door height clearance
-
-                    // Is entity inside this building's expanded AABB?
-                    const left   = b.x;
-                    const right  = b.x + b.w;
-                    const top    = b.y;         // (z in 3D)
-                    const bottom = b.y + b.h;
                     const r = e.r;
-
-                    if (e.x + r > left && e.x - r < right && e.y + r > top && e.y - r < bottom) {
-                        // Entity overlaps — check if they're in the door opening of the front face
-                        const onFrontFace = e.y + r >= bottom - 8 && e.y < bottom;
-                        const inDoorGap   = Math.abs(e.x - (b.x + b.w/2)) < doorHalfW + r;
-                        if (onFrontFace && inDoorGap) return; // let them through the door
-
-                        // Push out on the axis of smallest overlap
-                        const dLeft   = (e.x + r) - left;
-                        const dRight  = right - (e.x - r);
-                        const dTop    = (e.y + r) - top;
-                        const dBottom = bottom - (e.y - r);
-                        const minD = Math.min(dLeft, dRight, dTop, dBottom);
-                        if (minD === dLeft)   e.x -= dLeft;
-                        else if (minD === dRight)  e.x += dRight - (right - left + 2*r) + (right - left);
-                        else if (minD === dTop)    e.y -= dTop;
-                        else                       e.y += dBottom - (bottom - top + 2*r) + (bottom - top);
-                    }
+                    const resolveAABB = (wx, wy, ww, wh) => {
+                        if (e.x + r > wx && e.x - r < wx + ww && e.y + r > wy && e.y - r < wy + wh) {
+                            const dL = (e.x + r) - wx;
+                            const dR = (wx + ww) - (e.x - r);
+                            const dT = (e.y + r) - wy;
+                            const dB = (wy + wh) - (e.y - r);
+                            const m = Math.min(dL, dR, dT, dB);
+                            if (m === dL) e.x -= dL;
+                            else if (m === dR) e.x += dR;
+                            else if (m === dT) e.y -= dT;
+                            else e.y += dB;
+                        }
+                    };
+                    // Back
+                    resolveAABB(b.x, b.y, b.w, wallT);
+                    // Left
+                    resolveAABB(b.x, b.y, wallT, b.h);
+                    // Right
+                    resolveAABB(b.x + b.w - wallT, b.y, wallT, b.h);
+                    // Front (Left & Right of door)
+                    const segW = (b.w - doorW) / 2;
+                    resolveAABB(b.x, b.y + b.h - wallT, segW, wallT);
+                    resolveAABB(b.x + segW + doorW, b.y + b.h - wallT, segW, wallT);
                 });
             }
             addKillFeed(msg) {
@@ -2652,14 +2653,18 @@
 
                     // Wall (building) collision — bullets stop at walls in 3D
                     if (userData.is3D) {
+                        const wallT = 12; const doorW = 28;
                         this.map.buildings.forEach(bld => {
                             if (b.life <= 0) return;
-                            if (b.x > bld.x && b.x < bld.x + bld.w && b.y > bld.y && b.y < bld.y + bld.h) {
-                                // Allow through door on front face
-                                const onFront = b.y >= bld.y + bld.h - 12;
-                                const inDoor  = Math.abs(b.x - (bld.x + bld.w/2)) < 13;
-                                if (!(onFront && inDoor)) b.life = 0;
-                            }
+                            const checkAABB = (wx, wy, ww, wh) => {
+                                if (b.x > wx && b.x < wx + ww && b.y > wy && b.y < wy + wh) b.life = 0;
+                            };
+                            checkAABB(bld.x, bld.y, bld.w, wallT); // Back
+                            checkAABB(bld.x, bld.y, wallT, bld.h); // Left
+                            checkAABB(bld.x + bld.w - wallT, bld.y, wallT, bld.h); // Right
+                            const segW = (bld.w - doorW) / 2;
+                            checkAABB(bld.x, bld.y + bld.h - wallT, segW, wallT); // Front L
+                            checkAABB(bld.x + segW + doorW, bld.y + bld.h - wallT, segW, wallT); // Front R
                         });
                     }
 
