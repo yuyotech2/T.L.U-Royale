@@ -1032,9 +1032,11 @@
             'burst rifle': { dmg: 22, cd: 0.45, speed: 1100, count: 3, burstInterval: 0.06, isBurst: true },
             'pistol': { dmg: 16, cd: 0.2, speed: 850, count: 1 },
             'flame launcher': { dmg: 5, cd: 0.05, speed: 450, count: 1, isFlame: true },
-            'grenade': { dmg: 95, cd: 1.0, speed: 600, count: 1, isGrenade: true, radius: 250 },
-            'flashbang': { dmg: 0, cd: 1.0, speed: 650, count: 1, isFlash: true, radius: 400 }
+            'grenade': { dmg: 160, cd: 1.0, speed: 600, count: 1, isGrenade: true, radius: 300 },
+            'flashbang': { dmg: 0, cd: 1.0, speed: 650, count: 1, isFlash: true, radius: 450 }
         };
+
+        const EXPLOSION_RADIUS = 300;
 
         const CONSUMABLES = {
             'bandage': { heal: 25, type: 'hp', rarity: 'common' },
@@ -1447,6 +1449,7 @@
                 this.explosions = []; // For 3D visuals
                 this.flashIntensity = 0;
                 this.dropTimer = 0;
+                this.shakeAmt = 0;
             }
 
             normalizeAngle(a) {
@@ -1455,6 +1458,9 @@
                 if (a < -Math.PI) a += twoPi;
                 if (a > Math.PI) a -= twoPi;
                 return isNaN(a) ? 0 : a;
+            }
+            shake(amt) {
+                this.shakeAmt = Math.max(this.shakeAmt, amt);
             }
 
             lerpAngle(a, b, t) {
@@ -1753,6 +1759,14 @@
             update3D() {
                 const playerHeight = 30 + (this.player.dropScale > 1 ? (this.player.dropScale - 1) * 300 : 0);
                 this.camera.position.set(this.player.x, playerHeight, this.player.y);
+                
+                // Shake
+                if (this.shakeAmt > 0) {
+                    this.camera.position.x += (Math.random()-0.5) * this.shakeAmt * 0.5;
+                    this.camera.position.y += (Math.random()-0.5) * this.shakeAmt * 0.5;
+                    this.camera.position.z += (Math.random()-0.5) * this.shakeAmt * 0.5;
+                }
+
                 this.camera.rotation.set(0, 0, 0);
                 this.camera.rotateY(-this.cameraYaw - Math.PI/2);
                 this.camera.rotateX(this.cameraPitch);
@@ -1831,8 +1845,8 @@
                     }
                     ex.mesh.position.set(ex.x, ex.z, ex.y);
                     const s = 1 - ex.life;
-                    ex.mesh.scale.setScalar(s * 2);
-                    ex.mesh.material.opacity = ex.life * 0.6;
+                    ex.mesh.scale.setScalar(s * 2.5);
+                    ex.mesh.material.opacity = ex.life * 0.8;
                     if (ex.life <= 0) {
                         this.scene.remove(ex.mesh);
                         return false;
@@ -2726,10 +2740,13 @@
                     }
 
                     if (b.life <= 0 && (b.isGrenade || b.isFlash)) {
-                        // Explosion logic
                         if (b.isGrenade) {
                             audio.explode();
+                            this.shake(35);
                             this.explosions.push({ x: b.x, y: b.y, z: b.z3d || 0, radius: b.radius, life: 1.0, color: '#f97316' });
+                            // Particle burst
+                            for(let j=0; j<15; j++) this.addHitParticle(b.x + (Math.random()-0.5)*100, b.y + (Math.random()-0.5)*100);
+                            
                             // Damage in radius
                             this.entities.forEach(ent => {
                                 if (ent.alive && ent.state === 'playing') {
@@ -2742,6 +2759,7 @@
                             });
                         } else if (b.isFlash) {
                             audio.flash();
+                            this.shake(15);
                             this.explosions.push({ x: b.x, y: b.y, z: b.z3d || 0, radius: b.radius, life: 0.5, color: '#fff' });
                             const d = Math.sqrt((this.player.x - b.x)**2 + (this.player.y - b.y)**2);
                             if (d < b.radius) {
@@ -2754,10 +2772,11 @@
                                     const dot = camDir.dot(toFlash);
                                     if (dot < 0.15) blindStrength *= 0.1; // Averted gaze
                                 }
-                                this.flashIntensity = Math.max(this.flashIntensity, blindStrength * 3.5); // 5s solid + 2s fade
+                                this.flashIntensity = Math.max(this.flashIntensity, blindStrength * 3.5); 
                             }
                         }
                     }
+                    if (this.shakeAmt > 0) this.shakeAmt *= 0.9;
 
                     // Wall (building) collision — bullets stop at walls in 3D
                     if (userData.is3D) {
