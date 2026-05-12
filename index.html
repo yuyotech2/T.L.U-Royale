@@ -548,10 +548,39 @@
             font-size: 18px;
             font-weight: 900;
         }
+
+        /* Loading Screen */
+        #loading-screen {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(circle at center, #1e293b, #0f172a);
+            z-index: 10000;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-family: 'Outfit', sans-serif;
+        }
+        .loader {
+            width: 70px;
+            height: 70px;
+            border: 6px solid rgba(255, 255, 255, 0.05);
+            border-top: 6px solid #4ade80;
+            border-radius: 50%;
+            animation: spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+            box-shadow: 0 0 40px rgba(74, 222, 128, 0.2);
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 
 <body>
+    <div id="loading-screen">
+        <div class="loader"></div>
+        <h1 style="margin-top:24px; font-weight:900; letter-spacing:4px; font-size:28px;">TLU ROYALE</h1>
+        <p id="loading-status" style="opacity:0.6; margin-top:12px; font-weight:500; letter-spacing:1px;">INITIALIZING PROCEDURAL SYSTEMS...</p>
+    </div>
     <div id="app">
         <!-- Main Menu -->
         <div id="main-menu" class="overlay">
@@ -2070,6 +2099,17 @@
                 this.cvs.width = window.innerWidth; this.cvs.height = window.innerHeight;
             }
             start(mode = 'solo') {
+                const ls = document.getElementById('loading-screen');
+                ls.style.display = 'flex';
+                const status = document.getElementById('loading-status');
+                
+                // Allow UI to render the loading screen before the heavy work
+                setTimeout(() => {
+                    this.actuallyStart(mode, ls, status);
+                }, 50);
+            }
+
+            actuallyStart(mode, ls, status) {
                 this.running = true; this.state = 'playing';
                 this.currentMode = mode;
                 if (this.isTouch) document.getElementById('mobile-controls').style.display = 'block';
@@ -2150,6 +2190,8 @@
                 document.getElementById('plane-hud').innerText = this.isTouch ? `TAP TO DROP` : `PRESS [${dropKey}] TO DROP`;
                 console.log("Game started! Mode:", mode, "MapSize:", curMapSize);
                 this.supplyDrops = []; this.particles = []; this.dropTimer = 45; // First drop at 45s
+                
+                ls.style.display = 'none';
             }
             addHitParticle(x, y) {
                 for(let i=0; i<5; i++) {
