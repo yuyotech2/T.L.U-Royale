@@ -2752,9 +2752,9 @@
                                     const camDir = new THREE.Vector3(0,0,-1).applyQuaternion(this.camera.quaternion);
                                     const toFlash = new THREE.Vector3(b.x - this.player.x, (b.z3d||0) - 40, b.y - this.player.y).normalize();
                                     const dot = camDir.dot(toFlash);
-                                    if (dot < 0.2) blindStrength *= 0.2; // Averted gaze
+                                    if (dot < 0.15) blindStrength *= 0.1; // Averted gaze
                                 }
-                                this.flashIntensity = Math.max(this.flashIntensity, blindStrength * 2.0); // Make it REALLY bright
+                                this.flashIntensity = Math.max(this.flashIntensity, blindStrength * 3.5); // 5s solid + 2s fade
                             }
                         }
                     }
@@ -2963,7 +2963,7 @@
                 this.drawHUD();
 
                 if (this.flashIntensity > 0) {
-                    this.flashIntensity -= 0.4 * (1/60); // Fade over ~2.5 seconds
+                    this.flashIntensity -= 0.5 * (1/60); // 5s solid + 2s fade total
                     this.ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(1, this.flashIntensity)})`;
                     this.ctx.fillRect(0, 0, this.cvs.width, this.cvs.height);
                 }
