@@ -683,8 +683,7 @@
         <div id="plane-hud">PRESS [SPACE] TO DROP</div>
 
         <!-- Victory Screen -->
-        <div id="flash-overlay" style="position:fixed; top:0; left:0; width:100%; height:100%; background:white; opacity:0; pointer-events:none; z-index:99999; transition: opacity 0.1s linear;"></div>
-    <div id="victory-screen">
+        <div id="victory-screen">
             <h1 class="victory-text">#1 VICTORY ROYALE</h1>
         </div>
 
@@ -864,10 +863,23 @@
                 } else if (type === 'flame launcher') {
                     this.playNoise(0.1, 0.3 * vol, 500);
                     this.playTone(60, 0.1, 'sawtooth', 0.2 * vol);
+                } else if (type === 'grenade') {
+                    this.playTone(40, 0.8, 'sine', 1.0 * vol);
+                    this.playNoise(0.8, 0.8 * vol, 400);
+                } else if (type === 'flashbang') {
+                    this.playTone(800, 0.1, 'sine', 0.5 * vol);
+                    this.playTone(1200, 3.0, 'sine', 0.2 * vol); // Ringing sound
                 } else { // SMG
                     this.playTone(180, 0.1, 'square', 0.2 * vol);
                     this.playNoise(0.1, 0.2 * vol, 1500);
                 }
+            }
+            explode(vol = 1.0) {
+                this.playTone(50, 1.2, 'sawtooth', 1.0 * vol);
+                this.playNoise(1.2, 1.0 * vol, 300);
+            }
+            flash(vol = 1.0) {
+                this.playTone(1500, 0.1, 'sine', 0.8 * vol);
             }
             walk() {
                 this.playTone(40, 0.05, 'sine', 0.05);
@@ -991,8 +1003,8 @@
             'burst rifle': { dmg: 22, cd: 0.45, speed: 1100, count: 3, burstInterval: 0.06, isBurst: true },
             'pistol': { dmg: 16, cd: 0.2, speed: 850, count: 1 },
             'flame launcher': { dmg: 5, cd: 0.05, speed: 450, count: 1, isFlame: true },
-            'grenade': { dmg: 85, cd: 1.2, speed: 500, count: 1, isThrowable: true, explodeTime: 2.5 },
-            'flashbang': { dmg: 0, cd: 1.2, speed: 500, count: 1, isThrowable: true, explodeTime: 1.8 }
+            'grenade': { dmg: 95, cd: 1.0, speed: 600, count: 1, isGrenade: true, radius: 250 },
+            'flashbang': { dmg: 0, cd: 1.0, speed: 650, count: 1, isFlash: true, radius: 400 }
         };
 
         const CONSUMABLES = {
@@ -1118,7 +1130,7 @@
                         const medPool = ['bandage', 'medkit', 'mini pot', 'big pot'];
                         loot = medPool[Math.floor(Math.random() * medPool.length)];
                     } else {
-                        const standardPool = ['smg', 'pump shotgun', 'ak-47', 'burst rifle', 'pistol'];
+                        const standardPool = ['smg', 'pump shotgun', 'ak-47', 'burst rifle', 'pistol', 'grenade', 'flashbang'];
                         const highTierPool = ['heavy sniper', 'flame launcher'];
                         
                         // Restrict high power weapons to Epic+ rarity
@@ -1329,38 +1341,22 @@
                     this.cd = w.cd;
                     return;
                 }
-                
-                if (w.isThrowable) {
-                    const pitch3d = (userData.is3D && this === engine.player) ? engine.cameraPitch : 0;
-                    const hScale = Math.cos(pitch3d);
-                    engine.throwables.push({
-                        x: this.x, y: this.y,
-                        vx: Math.cos(this.angle) * w.speed * hScale, vy: Math.sin(this.angle) * w.speed * hScale,
-                        vz: Math.sin(pitch3d) * w.speed,
-                        z: 40,
-                        timer: w.explodeTime,
-                        type: wp.type,
-                        owner: this,
-                        life: 10 // long life, timer handles explosion
-                    });
-                    this.cd = w.cd;
-                    return;
-                }
-
                 for (let i = 0; i < w.count; i++) {
                     const spread = (Math.random() - 0.5) * (w.count > 1 ? 0.4 : 0.1);
                     // 3D pitch support: scale horizontal speed by cos(pitch), add vertical component
                     const pitch3d = (userData.is3D && this === engine.player) ? engine.cameraPitch : 0;
                     const hScale = Math.cos(pitch3d);
-                    engine.bullets.push({
+                    const b = {
                         x: this.x + Math.cos(this.angle) * 30, y: this.y + Math.sin(this.angle) * 30,
                         vx: Math.cos(this.angle + spread) * w.speed * hScale, vy: Math.sin(this.angle + spread) * w.speed * hScale,
-                        vz3d: Math.sin(pitch3d) * w.speed,
+                        vz3d: Math.sin(pitch3d) * w.speed + (w.isGrenade || w.isFlash ? 400 : 0), // Arc for grenades
                         z3d: 30,
                         dmg: w.dmg * (1 + (Object.keys(RARITIES).indexOf(wp.rarity) * 0.2)),
-                        owner: this, life: w.isFlame ? 0.4 : 1.5, type: wp.type,
-                        color: w.isFlame ? `rgb(255, ${Math.random()*150+50}, 0)` : '#ff0'
-                    });
+                        owner: this, life: (w.isGrenade || w.isFlash) ? 2.0 : (w.isFlame ? 0.4 : 1.5), type: wp.type,
+                        color: w.isFlame ? `rgb(255, ${Math.random()*150+50}, 0)` : (w.isGrenade ? '#4ade80' : (w.isFlash ? '#fff' : '#ff0')),
+                        isGrenade: w.isGrenade, isFlash: w.isFlash, radius: w.radius
+                    };
+                    engine.bullets.push(b);
                 }
                 const dist = Math.sqrt((this.x - engine.player.x) ** 2 + (this.y - engine.player.y) ** 2);
                 let vol = 1.0;
@@ -1419,8 +1415,8 @@
                 this.running = false; this.state = 'lobby'; this.droppedItems = [];
                 this.supplyDrops = [];
                 this.particles = [];
-                this.bullets = [];
-                this.throwables = [];
+                this.explosions = []; // For 3D visuals
+                this.flashIntensity = 0;
                 this.dropTimer = 0;
             }
 
@@ -1713,8 +1709,6 @@
                 this.bulletMeshes = new Map();
                 this.itemMeshes = new Map();
                 this.crateMeshes = new Map();
-                this.throwableMeshes = new Map();
-                this.throwables = [];
 
                 this.stormMesh = new THREE.Mesh(
                     new THREE.CylinderGeometry(this.map.stormRadius, this.map.stormRadius, 2000, 32, 1, true),
@@ -1783,43 +1777,38 @@
                     }
                 });
 
-                // Update Throwables
-                this.throwables.forEach(t => {
-                    let mesh = this.throwableMeshes.get(t);
-                    if (!mesh) {
-                        const geo = new THREE.SphereGeometry(4, 8, 8);
-                        const mat = new THREE.MeshStandardMaterial({ color: t.type === 'grenade' ? '#166534' : '#9ca3af', roughness: 0.5 });
-                        mesh = new THREE.Mesh(geo, mat);
-                        this.scene.add(mesh);
-                        this.throwableMeshes.set(t, mesh);
-                    }
-                    mesh.position.set(t.x, t.z, t.y);
-                });
-                for (let [t, mesh] of this.throwableMeshes.entries()) {
-                    if (!this.throwables.includes(t)) {
-                        this.scene.remove(mesh);
-                        this.throwableMeshes.delete(t);
-                    }
-                }
-
                 // Update Bullets
-                this.throwables.forEach(t => {
-                    this.ctx.fillStyle = t.type === 'grenade' ? '#166534' : '#9ca3af';
-                    this.ctx.beginPath();
-                    this.ctx.arc(t.x, t.y, 6, 0, Math.PI * 2);
-                    this.ctx.fill();
-                });
-
                 this.bullets.forEach(b => {
                     let mesh = this.bulletMeshes.get(b);
                     if (!mesh) {
-                        const geo = new THREE.SphereGeometry(3, 4, 4);
-                        const mat = new THREE.MeshBasicMaterial({ color: b.color });
+                        const size = (b.isGrenade || b.isFlash) ? 10 : 3;
+                        const geo = new THREE.SphereGeometry(size, 8, 8);
+                        const mat = new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.5, metalness: 0.5, emissive: b.color, emissiveIntensity: 0.5 });
                         mesh = new THREE.Mesh(geo, mat);
                         this.scene.add(mesh);
                         this.bulletMeshes.set(b, mesh);
                     }
                     mesh.position.set(b.x, b.z3d !== undefined ? b.z3d : 30, b.y);
+                });
+
+                // Update Explosions
+                this.explosions = this.explosions.filter(ex => {
+                    ex.life -= 0.016; // Approx dt
+                    if (!ex.mesh) {
+                        const geo = new THREE.SphereGeometry(ex.radius, 16, 16);
+                        const mat = new THREE.MeshBasicMaterial({ color: ex.color, transparent: true, opacity: 0.6 });
+                        ex.mesh = new THREE.Mesh(geo, mat);
+                        this.scene.add(ex.mesh);
+                    }
+                    ex.mesh.position.set(ex.x, ex.z, ex.y);
+                    const s = 1 - ex.life;
+                    ex.mesh.scale.setScalar(s * 2);
+                    ex.mesh.material.opacity = ex.life * 0.6;
+                    if (ex.life <= 0) {
+                        this.scene.remove(ex.mesh);
+                        return false;
+                    }
+                    return true;
                 });
                 for (let [b, mesh] of this.bulletMeshes.entries()) {
                     if (!this.bullets.includes(b)) {
@@ -2110,45 +2099,37 @@
                 ent.inventory[ent.selectedSlot] = null;
             }
 
-            // Resolve a circle entity out of all building wall segments (hollow houses)
+            // Resolve a circle entity out of all building AABBs (with door gap on front face)
             resolveWallCollision(e) {
                 if (!this.map) return;
                 this.map.buildings.forEach(b => {
-                    const doorW = 22;
-                    const doorHalfW = doorW / 2;
-                    const midX = b.x + b.w / 2;
+                    const doorHalfW = 11; // half of 22-unit door gap
+                    const doorH = 55;     // door height clearance
+
+                    // Is entity inside this building's expanded AABB?
+                    const left   = b.x;
+                    const right  = b.x + b.w;
+                    const top    = b.y;         // (z in 3D)
+                    const bottom = b.y + b.h;
                     const r = e.r;
 
-                    // Walls as segments (A,B coordinates)
-                    const segments = [
-                        { x1: b.x, y1: b.y, x2: b.x + b.w, y2: b.y }, // Back
-                        { x1: b.x, y1: b.y, x2: b.x, y2: b.y + b.h }, // Left
-                        { x1: b.x + b.w, y1: b.y, x2: b.x + b.w, y2: b.y + b.h }, // Right
-                        // Front Split for Door
-                        { x1: b.x, y1: b.y + b.h, x2: midX - doorHalfW, y2: b.y + b.h },
-                        { x1: midX + doorHalfW, y1: b.y + b.h, x2: b.x + b.w, y2: b.y + b.h }
-                    ];
+                    if (e.x + r > left && e.x - r < right && e.y + r > top && e.y - r < bottom) {
+                        // Entity overlaps — check if they're in the door opening of the front face
+                        const onFrontFace = e.y + r >= bottom - 8 && e.y < bottom;
+                        const inDoorGap   = Math.abs(e.x - (b.x + b.w/2)) < doorHalfW + r;
+                        if (onFrontFace && inDoorGap) return; // let them through the door
 
-                    segments.forEach(seg => {
-                        const dx = seg.x2 - seg.x1;
-                        const dy = seg.y2 - seg.y1;
-                        const l2 = dx * dx + dy * dy;
-                        if (l2 === 0) return;
-                        let t = ((e.x - seg.x1) * dx + (e.y - seg.y1) * dy) / l2;
-                        t = Math.max(0, Math.min(1, t));
-                        const px = seg.x1 + t * dx;
-                        const py = seg.y1 + t * dy;
-
-                        const distSq = (e.x - px) ** 2 + (e.y - py) ** 2;
-                        if (distSq < r * r) {
-                            const dist = Math.sqrt(distSq);
-                            const overlap = r - dist;
-                            const nx = (e.x - px) / dist;
-                            const ny = (e.y - py) / dist;
-                            e.x += nx * overlap;
-                            e.y += ny * overlap;
-                        }
-                    });
+                        // Push out on the axis of smallest overlap
+                        const dLeft   = (e.x + r) - left;
+                        const dRight  = right - (e.x - r);
+                        const dTop    = (e.y + r) - top;
+                        const dBottom = bottom - (e.y - r);
+                        const minD = Math.min(dLeft, dRight, dTop, dBottom);
+                        if (minD === dLeft)   e.x -= dLeft;
+                        else if (minD === dRight)  e.x += dRight - (right - left + 2*r) + (right - left);
+                        else if (minD === dTop)    e.y -= dTop;
+                        else                       e.y += dBottom - (bottom - top + 2*r) + (bottom - top);
+                    }
                 });
             }
             addKillFeed(msg) {
@@ -2411,16 +2392,7 @@
                                 }
                                 moveX = targetEntity.x - e.x;
                                 moveY = targetEntity.y - e.y;
-                                if (e.cd <= 0) { 
-                                    const itm = e.inventory[e.selectedSlot];
-                                    const w = WEAPONS[itm.type];
-                                    if (w.isThrowable) {
-                                        if (Math.random() < 0.1) e.shoot(this);
-                                    } else {
-                                        e.shoot(this);
-                                    }
-                                    e.cd = w.cd * 1.5; 
-                                }
+                                if (e.cd <= 0) { e.shoot(this); e.cd = WEAPONS[e.inventory[e.selectedSlot].type].cd * 1.5; }
                             } else if (e.team === 'player_team') {
                                 // Follow Teammate State
                                 const dp = Math.sqrt((this.player.x - e.x) ** 2 + (this.player.y - e.y) ** 2);
@@ -2626,74 +2598,6 @@
                     }
                 });
 
-                // Throwables
-                for (let i = this.throwables.length - 1; i >= 0; i--) {
-                    const t = this.throwables[i];
-                    const nextX = t.x + t.vx * dt;
-                    const nextY = t.y + t.vy * dt;
-
-                    // Wall bounce logic
-                    this.map.buildings.forEach(b => {
-                        const doorW = 22, doorHalfW = 11, midX = b.x + b.w / 2;
-                        const segments = [
-                            { x1: b.x, y1: b.y, x2: b.x + b.w, y2: b.y, nx: 0, ny: -1 }, // Back
-                            { x1: b.x, y1: b.y, x2: b.x, y2: b.y + b.h, nx: -1, ny: 0 }, // Left
-                            { x1: b.x + b.w, y1: b.y, x2: b.x + b.w, y2: b.y + b.h, nx: 1, ny: 0 }, // Right
-                            { x1: b.x, y1: b.y + b.h, x2: midX - doorHalfW, y2: b.y + b.h, nx: 0, ny: 1 }, // Front Left
-                            { x1: midX + doorHalfW, y1: b.y + b.h, x2: b.x + b.w, y2: b.y + b.h, nx: 0, ny: 1 } // Front Right
-                        ];
-                        segments.forEach(seg => {
-                            const dx = seg.x2 - seg.x1, dy = seg.y2 - seg.y1, l2 = dx*dx + dy*dy;
-                            let u = ((t.x - seg.x1) * dx + (t.y - seg.y1) * dy) / l2;
-                            u = Math.max(0, Math.min(1, u));
-                            const px = seg.x1 + u * dx, py = seg.y1 + u * dy;
-                            const dist = Math.sqrt((t.x - px)**2 + (t.y - py)**2);
-                            if (dist < 10) { // throwable radius
-                                // Bounce
-                                if (seg.nx !== 0) t.vx *= -0.6;
-                                if (seg.ny !== 0) t.vy *= -0.6;
-                                t.x += seg.nx * 5; t.y += seg.ny * 5; // push out
-                            }
-                        });
-                    });
-
-                    t.x += t.vx * dt; t.y += t.vy * dt;
-                    t.vz -= 600 * dt; // gravity
-                    t.z += t.vz * dt;
-                    if (t.z < 0) { t.z = 0; t.vz *= -0.4; t.vx *= 0.8; t.vy *= 0.8; } // bounce ground
-                    t.timer -= dt;
-
-                    if (t.timer <= 0) {
-                        // EXPLODE
-                        if (t.type === 'grenade') {
-                            this.entities.forEach(ent => {
-                                const d = Math.sqrt((ent.x - t.x) ** 2 + (ent.y - t.y) ** 2);
-                                if (d < 250) {
-                                    const dmg = 85 * (1 - d/250);
-                                    ent.takeDamage(dmg, t.owner, this);
-                                }
-                            });
-                            // Effects
-                            for(let j=0; j<20; j++) this.particles.push({ x: t.x, y: t.y, vx: (Math.random()-0.5)*500, vy: (Math.random()-0.5)*500, life: 0.8, color: '#f97316' });
-                            audio.playTone(100, 0.5, 'square', 1.0);
-                        } else if (t.type === 'flashbang') {
-                            const distToPlayer = Math.sqrt((this.player.x - t.x) ** 2 + (this.player.y - t.y) ** 2);
-                            if (distToPlayer < 800) {
-                                // REALLY BRIGHT
-                                const overlay = document.getElementById('flash-overlay');
-                                overlay.style.transition = 'none';
-                                overlay.style.opacity = '1';
-                                setTimeout(() => {
-                                    overlay.style.transition = 'opacity 5s ease-out';
-                                    overlay.style.opacity = '0';
-                                }, 50);
-                            }
-                            audio.playTone(800, 1.5, 'sine', 0.5);
-                        }
-                        this.throwables.splice(i, 1);
-                    }
-                }
-
                 // Bullets
                 for (let i = this.bullets.length - 1; i >= 0; i--) {
                     const b = this.bullets[i];
@@ -2701,8 +2605,49 @@
                     // 3D vertical movement
                     if (b.vz3d !== undefined) {
                         b.z3d = (b.z3d || 30) + b.vz3d * dt;
-                        // Kill bullet if it hits the ground
-                        if (b.z3d <= 0) { b.life = 0; }
+                        if (b.isGrenade || b.isFlash) b.vz3d -= 800 * dt; // Gravity for throwables
+                        // Bounce/Kill bullet if it hits the ground
+                        if (b.z3d <= 0) { 
+                            if (b.isGrenade || b.isFlash) {
+                                b.z3d = 0; b.vx *= 0.5; b.vy *= 0.5; b.vz3d = -b.vz3d * 0.3; // Bounce
+                            } else {
+                                b.life = 0; 
+                            }
+                        }
+                    }
+
+                    if (b.life <= 0 && (b.isGrenade || b.isFlash)) {
+                        // Explosion logic
+                        if (b.isGrenade) {
+                            audio.explode();
+                            this.explosions.push({ x: b.x, y: b.y, z: b.z3d || 0, radius: b.radius, life: 1.0, color: '#f97316' });
+                            // Damage in radius
+                            this.entities.forEach(ent => {
+                                if (ent.alive && ent.state === 'playing') {
+                                    const d = Math.sqrt((ent.x - b.x)**2 + (ent.y - b.y)**2);
+                                    if (d < b.radius) {
+                                        const dmg = b.dmg * (1 - d/b.radius);
+                                        ent.takeDamage(dmg, b.owner, this);
+                                    }
+                                }
+                            });
+                        } else if (b.isFlash) {
+                            audio.flash();
+                            this.explosions.push({ x: b.x, y: b.y, z: b.z3d || 0, radius: b.radius, life: 0.5, color: '#fff' });
+                            const d = Math.sqrt((this.player.x - b.x)**2 + (this.player.y - b.y)**2);
+                            if (d < b.radius) {
+                                // Blinding logic
+                                let blindStrength = (1 - d/b.radius);
+                                if (userData.is3D) {
+                                    // Check if looking at it
+                                    const camDir = new THREE.Vector3(0,0,-1).applyQuaternion(this.camera.quaternion);
+                                    const toFlash = new THREE.Vector3(b.x - this.player.x, (b.z3d||0) - 40, b.y - this.player.y).normalize();
+                                    const dot = camDir.dot(toFlash);
+                                    if (dot < 0.2) blindStrength *= 0.2; // Averted gaze
+                                }
+                                this.flashIntensity = Math.max(this.flashIntensity, blindStrength * 2.0); // Make it REALLY bright
+                            }
+                        }
                     }
 
                     // Wall (building) collision — bullets stop at walls in 3D
@@ -2896,13 +2841,6 @@
                     this.ctx.globalAlpha = 1.0;
                 });
 
-                this.throwables.forEach(t => {
-                    this.ctx.fillStyle = t.type === 'grenade' ? '#166534' : '#9ca3af';
-                    this.ctx.beginPath();
-                    this.ctx.arc(t.x, t.y, 6, 0, Math.PI * 2);
-                    this.ctx.fill();
-                });
-
                 this.bullets.forEach(b => { 
                     this.ctx.fillStyle = b.color || '#ff0'; 
                     const s = b.type === 'flame launcher' ? 8 + Math.random()*8 : 4;
@@ -2910,6 +2848,12 @@
                 });
                 this.ctx.restore();
                 this.drawHUD();
+
+                if (this.flashIntensity > 0) {
+                    this.flashIntensity -= 0.4 * (1/60); // Fade over ~2.5 seconds
+                    this.ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(1, this.flashIntensity)})`;
+                    this.ctx.fillRect(0, 0, this.cvs.width, this.cvs.height);
+                }
             }
             drawHUD() {
                 if (this.state !== 'playing' || this.player.state === 'in_plane') {
