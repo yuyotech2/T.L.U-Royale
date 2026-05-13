@@ -2736,101 +2736,97 @@
                     }
                 });
 
-                // Bullets
+                        }
+                    }
+                }
+
+                // Impact Detection
                 for (let i = this.bullets.length - 1; i >= 0; i--) {
                     const b = this.bullets[i];
+                    if (b.exploded) { this.bullets.splice(i, 1); continue; }
+                    
                     b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+                    
                     // 3D vertical movement
                     if (b.vz3d !== undefined) {
                         b.z3d = (b.z3d || 30) + b.vz3d * dt;
-                        if (b.isGrenade || b.isFlash) b.vz3d -= 800 * dt; // Gravity for throwables
-                        // Bounce/Kill bullet if it hits the ground
+                        if (b.isGrenade || b.isFlash) b.vz3d -= 800 * dt;
                         if (b.z3d <= 0) { 
-                            if (b.isGrenade || b.isFlash) {
-                                b.z3d = 0; b.vx *= 0.5; b.vy *= 0.5; b.vz3d = -b.vz3d * 0.3; // Bounce
-                            } else {
-                                b.life = 0; 
+                            if (b.isGrenade || b.isFlash) { b.z3d = 0; b.vx *= 0.5; b.vy *= 0.5; b.vz3d = -b.vz3d * 0.3; }
+                            else b.life = 0;
+                        }
+                    }
+
+                    // Collision Detection (Impacts set life to 0)
+                    if (b.life > 0) {
+                        // Wall Collision (3D)
+                        if (userData.is3D) {
+                            const wallT = 12; const doorW = 28;
+                            this.map.buildings.forEach(bld => {
+                                const checkAABB = (wx, wy, ww, wh) => {
+                                    if (b.x > wx && b.x < wx + ww && b.y > wy && b.y < wy + wh) b.life = 0;
+                                };
+                                checkAABB(bld.x, bld.y, bld.w, wallT); 
+                                checkAABB(bld.x, bld.y, wallT, bld.h); 
+                                checkAABB(bld.x + bld.w - wallT, bld.y, wallT, bld.h); 
+                                const segW = (bld.w - doorW) / 2;
+                                checkAABB(bld.x, bld.y + bld.h - wallT, segW, wallT); 
+                                checkAABB(bld.x + segW + doorW, bld.y + bld.h - wallT, segW, wallT); 
+                            });
+                        }
+                        // Entity Collision
+                        this.entities.forEach(ent => {
+                            if (ent.alive && ent.state === 'playing' && ent !== b.owner && ent.team !== b.owner.team) {
+                                const d = Math.sqrt((b.x - ent.x)**2 + (b.y - ent.y)**2);
+                                if (d < ent.r) {
+                                    ent.takeDamage(b.dmg, b.owner, this, b.type === 'flame launcher');
+                                    b.life = 0;
+                                }
                             }
-                        }
-                    }
-
-                    if (b.life <= 0 && (b.isGrenade || b.isFlash)) {
-                        if (b.isGrenade) {
-                            audio.explode();
-                            this.shake(35);
-                            this.explosions.push({ x: b.x, y: b.y, z: b.z3d || 0, radius: b.radius, life: 1.0, color: '#f97316' });
-                            // Particle burst
-                            for(let j=0; j<15; j++) this.addHitParticle(b.x + (Math.random()-0.5)*100, b.y + (Math.random()-0.5)*100);
-                            
-                            // Damage in radius
-                            this.entities.forEach(ent => {
-                                if (ent.alive && ent.state === 'playing') {
-                                    const d = Math.sqrt((ent.x - b.x)**2 + (ent.y - b.y)**2);
-                                    if (d < b.radius) {
-                                        const dmg = b.dmg * (1 - d/b.radius);
-                                        ent.takeDamage(dmg, b.owner, this);
-                                    }
-                                }
-                            });
-                        } else if (b.isFlash) {
-                            audio.flash();
-                            this.shake(15);
-                            this.explosions.push({ x: b.x, y: b.y, z: b.z3d || 0, radius: b.radius, life: 0.5, color: '#fff' });
-                            
-                            this.entities.forEach(ent => {
-                                if (ent.alive && ent.state === 'playing') {
-                                    const d = Math.sqrt((ent.x - b.x)**2 + (ent.y - b.y)**2);
-                                    if (d < b.radius) {
-                                        let blindStrength = (1 - d/b.radius);
-                                        
-                                        if (ent === this.player) {
-                                            if (userData.is3D) {
-                                                const angToFlash = Math.atan2(b.y - this.player.y, b.x - this.player.x);
-                                                const lookDiff = Math.abs(this.normalizeAngle(angToFlash - this.cameraYaw));
-                                                if (lookDiff > 0.8) blindStrength *= 0.1; // Not looking at it (~45 deg)
-                                            }
-                                            this.flashIntensity = Math.max(this.flashIntensity, blindStrength * 4.5);
-                                        } else if (ent.isBot) {
-                                            // Bots are simple: if in range, they are blinded
-                                            ent.blindTimer = Math.max(ent.blindTimer, blindStrength * 5.0);
-                                        }
-                                    }
-                                }
-                            });
-                        }
-                    }
-                    if (this.shakeAmt > 0) this.shakeAmt *= 0.9;
-
-                    // Wall (building) collision — bullets stop at walls in 3D
-                    if (userData.is3D) {
-                        const wallT = 12; const doorW = 28;
-                        this.map.buildings.forEach(bld => {
-                            if (b.life <= 0) return;
-                            const checkAABB = (wx, wy, ww, wh) => {
-                                if (b.x > wx && b.x < wx + ww && b.y > wy && b.y < wy + wh) b.life = 0;
-                            };
-                            checkAABB(bld.x, bld.y, bld.w, wallT); // Back
-                            checkAABB(bld.x, bld.y, wallT, bld.h); // Left
-                            checkAABB(bld.x + bld.w - wallT, bld.y, wallT, bld.h); // Right
-                            const segW = (bld.w - doorW) / 2;
-                            checkAABB(bld.x, bld.y + bld.h - wallT, segW, wallT); // Front L
-                            checkAABB(bld.x + segW + doorW, bld.y + bld.h - wallT, segW, wallT); // Front R
+                        });
+                        // Crate Collision
+                        this.map.crates.forEach(c => {
+                            if (c.alive && Math.sqrt((b.x - c.x) ** 2 + (b.y - c.y) ** 2) < c.r) b.life = 0;
                         });
                     }
 
-                    this.entities.forEach(ent => {
-                        if (ent.alive && ent.state === 'playing' && ent !== b.owner && ent.team !== b.owner.team && Math.sqrt((b.x - ent.x) ** 2 + (b.y - ent.y) ** 2) < ent.r) {
-                            ent.takeDamage(b.dmg, b.owner, this, b.type === 'flame launcher'); b.life = 0;
+                    // Explosion Check (Triggered by fuse or impact)
+                    if (b.life <= 0 && (b.isGrenade || b.isFlash)) {
+                        b.exploded = true;
+                        if (b.isGrenade) {
+                            audio.explode(); this.shake(35);
+                            this.explosions.push({ x: b.x, y: b.y, z: b.z3d || 0, radius: b.radius, life: 1.0, color: '#f97316' });
+                            for(let j=0; j<15; j++) this.addHitParticle(b.x + (Math.random()-0.5)*100, b.y + (Math.random()-0.5)*100);
+                            this.entities.forEach(ent => {
+                                if (ent.alive && ent.state === 'playing') {
+                                    const d = Math.sqrt((ent.x - b.x)**2 + (ent.y - b.y)**2);
+                                    if (d < b.radius) ent.takeDamage(b.dmg * (1 - d/b.radius), b.owner, this);
+                                }
+                            });
+                        } else if (b.isFlash) {
+                            audio.flash(); this.shake(15);
+                            this.explosions.push({ x: b.x, y: b.y, z: b.z3d || 0, radius: b.radius, life: 0.5, color: '#fff' });
+                            this.entities.forEach(ent => {
+                                if (ent.alive && ent.state === 'playing') {
+                                    const d = Math.sqrt((ent.x - b.x)**2 + (ent.y - b.y)**2);
+                                    if (d < b.radius) {
+                                        let s = (1 - d/b.radius);
+                                        if (ent === this.player) {
+                                            const angToFlash = Math.atan2(b.y - this.player.y, b.x - this.player.x);
+                                            const lookDiff = Math.abs(this.normalizeAngle(angToFlash - this.cameraYaw));
+                                            if (lookDiff > 0.8) s *= 0.1;
+                                            this.flashIntensity = Math.max(this.flashIntensity, s * 4.5);
+                                        } else if (ent.isBot) ent.blindTimer = Math.max(ent.blindTimer, s * 5.0);
+                                    }
+                                }
+                            });
                         }
-                    });
-                    this.map.crates.forEach(c => {
-                        if (c.alive && Math.sqrt((b.x - c.x) ** 2 + (b.y - c.y) ** 2) < c.r) {
-                            b.life = 0; // Bullets hit crates but don't damage them
-                        }
-                    });
+                    }
+
                     if (b.life <= 0) this.bullets.splice(i, 1);
                 }
-
+                if (this.shakeAmt > 0) this.shakeAmt *= 0.9;
+ 
                 const alive = this.entities.filter(e => e.alive);
                 const teamsLeft = new Set(alive.map(e => e.team));
                 if (teamsLeft.size === 1 && teamsLeft.has('player_team') && this.state === 'playing') {
