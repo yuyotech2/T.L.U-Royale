@@ -1160,19 +1160,24 @@
                     if (isMedical) {
                         const medPool = ['bandage', 'medkit', 'mini pot', 'big pot'];
                         loot = medPool[Math.floor(Math.random() * medPool.length)];
+                        // Throwables can also appear in common med crates
+                        if (['common', 'uncommon'].includes(rarity) && Math.random() < 0.25) loot = 'flashbang';
                     } else {
-                        const standardPool = ['smg', 'pump shotgun', 'ak-47', 'burst rifle', 'pistol', 'grenade', 'flashbang'];
+                        const basicPool = ['smg', 'pump shotgun', 'ak-47', 'burst rifle', 'pistol'];
+                        const utilityPool = ['grenade', 'flashbang'];
                         const highTierPool = ['heavy sniper', 'flame launcher'];
                         
-                        // Restrict high power weapons to Epic+ rarity
-                        if (['mythic', 'legendary', 'epic'].includes(rarity)) {
-                            if (Math.random() < 0.2) {
+                        if (['common', 'uncommon'].includes(rarity)) {
+                            // 40% chance for utility in low-tier crates
+                            if (Math.random() < 0.4) loot = utilityPool[Math.floor(Math.random() * utilityPool.length)];
+                            else loot = basicPool[Math.floor(Math.random() * basicPool.length)];
+                        } else {
+                            // Rare and above: strictly weapons, with high-tier roll for Epic+
+                            if (['mythic', 'legendary', 'epic'].includes(rarity) && Math.random() < 0.3) {
                                 loot = highTierPool[Math.floor(Math.random() * highTierPool.length)];
                             } else {
-                                loot = standardPool[Math.floor(Math.random() * standardPool.length)];
+                                loot = basicPool[Math.floor(Math.random() * basicPool.length)];
                             }
-                        } else {
-                            loot = standardPool[Math.floor(Math.random() * standardPool.length)];
                         }
                     }
 
