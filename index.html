@@ -581,6 +581,7 @@
         <h1 style="margin-top:24px; font-weight:900; letter-spacing:4px; font-size:28px;">TLU ROYALE</h1>
         <p id="loading-status" style="opacity:0.6; margin-top:12px; font-weight:500; letter-spacing:1px;">INITIALIZING PROCEDURAL SYSTEMS...</p>
     </div>
+    <div id="flash-overlay" style="position:fixed; inset:0; background:#fff; pointer-events:none; z-index:9999; opacity:0; display:none;"></div>
     <div id="app">
         <!-- Main Menu -->
         <div id="main-menu" class="overlay">
@@ -3003,10 +3004,13 @@
                 this.ctx.restore();
                 this.drawHUD();
 
+                const flashOverlay = document.getElementById('flash-overlay');
                 if (this.flashIntensity > 0) {
                     this.flashIntensity -= 0.5 * (1/60); // 5s solid + 2s fade total
-                    this.ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(1, this.flashIntensity)})`;
-                    this.ctx.fillRect(0, 0, this.cvs.width, this.cvs.height);
+                    flashOverlay.style.display = 'block';
+                    flashOverlay.style.opacity = Math.min(1, this.flashIntensity);
+                } else {
+                    flashOverlay.style.display = 'none';
                 }
             }
             drawHUD() {
