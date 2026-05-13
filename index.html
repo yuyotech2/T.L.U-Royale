@@ -1340,6 +1340,7 @@
                 this.burstProp = null;
                 this.burnTimer = 0;
                 this.burnSource = null;
+                this.blindTimer = 0;
             }
             useConsumable(engine) {
                 const wp = this.inventory[this.selectedSlot];
@@ -1411,9 +1412,9 @@
                         this.shield = 0;
                     }
                 }
-                this.hp -= amt;
-                this.hitVFX = 0.5; // Trigger red hit flash
                 if (amt > 0) {
+                    this.hp -= amt;
+                    this.hitVFX = 0.5; // Trigger red hit flash
                     engine.addHitParticle(this.x, this.y);
                 }
                 if (this.hp <= 0 && this.alive) {
@@ -2330,6 +2331,7 @@
 
                 this.entities.forEach(e => {
                     if (!e.alive) return;
+                    if (e.blindTimer > 0) e.blindTimer -= dt;
 
                     // Bush Hiding Logic
                     if (e.revealTime > 0) e.revealTime -= dt;
@@ -2492,6 +2494,12 @@
                             }
                         } else {
                             // --- BOT BRAIN & STEERING ---
+                            if (e.blindTimer > 0) {
+                                e.velX = (e.velX||0) * 0.9; e.velY = (e.velY||0) * 0.9;
+                                e.x += (e.velX||0) * 160 * dt; e.y += (e.velY||0) * 160 * dt;
+                                this.resolveWallCollision(e);
+                                return;
+                            }
                             let moveX = 0, moveY = 0;
                             let baseSpeed = 160;
                             let targetEntity = null, targetDist = 1500;
@@ -2761,19 +2769,28 @@
                             audio.flash();
                             this.shake(15);
                             this.explosions.push({ x: b.x, y: b.y, z: b.z3d || 0, radius: b.radius, life: 0.5, color: '#fff' });
-                            const d = Math.sqrt((this.player.x - b.x)**2 + (this.player.y - b.y)**2);
-                            if (d < b.radius) {
-                                // Blinding logic
-                                let blindStrength = (1 - d/b.radius);
-                                if (userData.is3D) {
-                                    // Check if looking at it
-                                    const camDir = new THREE.Vector3(0,0,-1).applyQuaternion(this.camera.quaternion);
-                                    const toFlash = new THREE.Vector3(b.x - this.player.x, (b.z3d||0) - 40, b.y - this.player.y).normalize();
-                                    const dot = camDir.dot(toFlash);
-                                    if (dot < 0.15) blindStrength *= 0.1; // Averted gaze
+                            
+                            this.entities.forEach(ent => {
+                                if (ent.alive && ent.state === 'playing') {
+                                    const d = Math.sqrt((ent.x - b.x)**2 + (ent.y - b.y)**2);
+                                    if (d < b.radius) {
+                                        let blindStrength = (1 - d/b.radius);
+                                        
+                                        if (ent === this.player) {
+                                            if (userData.is3D) {
+                                                const camDir = new THREE.Vector3(0,0,-1).applyQuaternion(this.camera.quaternion);
+                                                const toFlash = new THREE.Vector3(b.x - this.player.x, (b.z3d||0) - 40, b.y - this.player.y).normalize();
+                                                const dot = camDir.dot(toFlash);
+                                                if (dot < 0.15) blindStrength *= 0.1;
+                                            }
+                                            this.flashIntensity = Math.max(this.flashIntensity, blindStrength * 3.5);
+                                        } else if (ent.isBot) {
+                                            // Bots are simple: if in range, they are blinded
+                                            ent.blindTimer = Math.max(ent.blindTimer, blindStrength * 5.0);
+                                        }
+                                    }
                                 }
-                                this.flashIntensity = Math.max(this.flashIntensity, blindStrength * 3.5); 
-                            }
+                            });
                         }
                     }
                     if (this.shakeAmt > 0) this.shakeAmt *= 0.9;
