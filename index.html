@@ -1457,6 +1457,7 @@
                 this.flashIntensity = 0;
                 this.dropTimer = 0;
                 this.shakeAmt = 0;
+                this.flashEl = document.getElementById('flash-overlay');
             }
 
             normalizeAngle(a) {
@@ -2784,12 +2785,11 @@
                                         
                                         if (ent === this.player) {
                                             if (userData.is3D) {
-                                                const camDir = new THREE.Vector3(0,0,-1).applyQuaternion(this.camera.quaternion);
-                                                const toFlash = new THREE.Vector3(b.x - this.player.x, (b.z3d||0) - 40, b.y - this.player.y).normalize();
-                                                const dot = camDir.dot(toFlash);
-                                                if (dot < 0.15) blindStrength *= 0.1;
+                                                const angToFlash = Math.atan2(b.y - this.player.y, b.x - this.player.x);
+                                                const lookDiff = Math.abs(this.normalizeAngle(angToFlash - this.cameraYaw));
+                                                if (lookDiff > 0.8) blindStrength *= 0.1; // Not looking at it (~45 deg)
                                             }
-                                            this.flashIntensity = Math.max(this.flashIntensity, blindStrength * 3.5);
+                                            this.flashIntensity = Math.max(this.flashIntensity, blindStrength * 4.5);
                                         } else if (ent.isBot) {
                                             // Bots are simple: if in range, they are blinded
                                             ent.blindTimer = Math.max(ent.blindTimer, blindStrength * 5.0);
@@ -3004,13 +3004,14 @@
                 this.ctx.restore();
                 this.drawHUD();
 
-                const flashOverlay = document.getElementById('flash-overlay');
                 if (this.flashIntensity > 0) {
-                    this.flashIntensity -= 0.5 * (1/60); // 5s solid + 2s fade total
-                    flashOverlay.style.display = 'block';
-                    flashOverlay.style.opacity = Math.min(1, this.flashIntensity);
-                } else {
-                    flashOverlay.style.display = 'none';
+                    this.flashIntensity -= 0.5 * (1/60); // 7s solid + 2s fade total at 4.5
+                    if (this.flashEl) {
+                        this.flashEl.style.display = 'block';
+                        this.flashEl.style.opacity = Math.min(1, this.flashIntensity);
+                    }
+                } else if (this.flashEl) {
+                    this.flashEl.style.display = 'none';
                 }
             }
             drawHUD() {
