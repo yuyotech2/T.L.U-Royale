@@ -1168,8 +1168,8 @@
                         const highTierPool = ['heavy sniper', 'flame launcher'];
                         
                         if (['common', 'uncommon'].includes(rarity)) {
-                            // 40% chance for utility in low-tier crates
-                            if (Math.random() < 0.4) loot = utilityPool[Math.floor(Math.random() * utilityPool.length)];
+                            // 30% chance for utility in low-tier crates
+                            if (Math.random() < 0.3) loot = utilityPool[Math.floor(Math.random() * utilityPool.length)];
                             else loot = basicPool[Math.floor(Math.random() * basicPool.length)];
                         } else {
                             // Rare and above: strictly weapons, with high-tier roll for Epic+
