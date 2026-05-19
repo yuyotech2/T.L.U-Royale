@@ -1191,12 +1191,13 @@
                         if (['common', 'uncommon'].includes(rarity) && Math.random() < 0.25) loot = 'flashbang';
                     } else {
                         const basicPool = ['smg', 'pump shotgun', 'ak-47', 'burst rifle', 'pistol'];
-                        const utilityPool = ['grenade', 'flashbang'];
                         const highTierPool = ['heavy sniper', 'flame launcher'];
                         
-                        if (['common', 'uncommon'].includes(rarity)) {
-                            // 30% chance for utility in low-tier crates
-                            if (Math.random() < 0.3) loot = utilityPool[Math.floor(Math.random() * utilityPool.length)];
+                        if (Math.random() < 0.30) {
+                            loot = 'flashbang'; // Guaranteed 30% chance for flashbangs in any weapon crate
+                        } else if (['common', 'uncommon'].includes(rarity)) {
+                            // 15% chance for a grenade in low-tier crates if no flashbang
+                            if (Math.random() < 0.15) loot = 'grenade';
                             else loot = basicPool[Math.floor(Math.random() * basicPool.length)];
                         } else {
                             // Rare and above: strictly weapons, with high-tier roll for Epic+
@@ -2835,14 +2836,13 @@
                                 if (ent.alive && ent.state === 'playing') {
                                     const d = Math.sqrt((ent.x - b.x)**2 + (ent.y - b.y)**2);
                                     if (d < b.radius) {
-                                        let s = (1 - d/b.radius);
                                         if (ent === this.player) {
-                                            const lookAng = userData.is3D ? this.cameraYaw : this.player.angle;
-                                            const angToFlash = Math.atan2(b.y - this.player.y, b.x - this.player.x);
-                                            const lookDiff = Math.abs(this.normalizeAngle(angToFlash - lookAng));
-                                            if (lookDiff > 0.8) s *= 0.1;
-                                            this.flashIntensity = Math.max(this.flashIntensity || 0, s * 4.5);
-                                        } else if (ent.isBot) ent.blindTimer = Math.max(ent.blindTimer || 0, s * 5.0);
+                                            // Force full blind for debugging if within radius
+                                            this.flashIntensity = Math.max(this.flashIntensity || 0, 3.5);
+                                        } else if (ent.isBot) {
+                                            let s = (1 - d/b.radius);
+                                            ent.blindTimer = Math.max(ent.blindTimer || 0, s * 5.0);
+                                        }
                                     }
                                 }
                             });
@@ -3033,7 +3033,7 @@
                     if (!flashDiv) {
                         flashDiv = document.createElement('div');
                         flashDiv.id = 'flash-overlay';
-                        flashDiv.style.cssText = 'position:fixed; inset:0; background:#fff; pointer-events:none; z-index:99999;';
+                        flashDiv.style.cssText = 'position:fixed; inset:0; background:#fff; pointer-events:none; z-index:2147483647;';
                         document.body.appendChild(flashDiv);
                     }
                     flashDiv.style.display = 'block';
