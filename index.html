@@ -994,18 +994,44 @@
 
         function saveGame() { localStorage.setItem(SAVE_KEY, JSON.stringify(userData)); }
         function loadGame() {
-            const saved = localStorage.getItem(SAVE_KEY);
-            if (saved) {
-                const parsed = JSON.parse(saved);
-                const keybinds = { ...userData.keybinds, ...(parsed.keybinds || {}) };
-                userData = { ...userData, ...parsed, keybinds };
+            const legacyKeys = ['TLU_ROYALE_SAVE', 'TLU_ROYALE_DATA', 'PRIME_ROYALE_SAVE', 'tlu_data'];
+            let foundData = null;
+            let usedKey = SAVE_KEY;
+
+            try {
+                // Try current key first
+                const currentSaved = localStorage.getItem(SAVE_KEY);
+                if (currentSaved) {
+                    foundData = JSON.parse(currentSaved);
+                } else {
+                    // Check legacy keys
+                    for (const key of legacyKeys) {
+                        const legacy = localStorage.getItem(key);
+                        if (legacy) {
+                            console.log("Migrating legacy data from:", key);
+                            foundData = JSON.parse(legacy);
+                            usedKey = key;
+                            break;
+                        }
+                    }
+                }
+
+                if (foundData) {
+                    const keybinds = { ...userData.keybinds, ...(foundData.keybinds || {}) };
+                    userData = { ...userData, ...foundData, keybinds };
+                    if (usedKey !== SAVE_KEY) saveGame(); // Finalize migration
+                }
+            } catch (e) {
+                console.error("Failed to load save data:", e);
             }
+
             userData.party = []; // Fixed: Always start with an empty lobby
-            document.getElementById('player-nick').value = userData.nickname;
-            document.getElementById('display-name').innerText = userData.nickname;
-            document.getElementById('display-wins').innerText = `${userData.wins} Wins`;
-            const lvl = Math.floor(userData.proKills / 10) + 1;
+            document.getElementById('player-nick').value = userData.nickname || '';
+            document.getElementById('display-name').innerText = userData.nickname || 'Survivor';
+            document.getElementById('display-wins').innerText = `${userData.wins || 0} Wins`;
+            const lvl = Math.floor((userData.proKills || 0) / 10) + 1;
             document.getElementById('display-level').innerText = `PRO LVL ${lvl}`;
+            console.log("Loaded UserData:", userData);
         }
         loadGame();
 
@@ -2735,10 +2761,6 @@
                         e.x = Math.max(e.r, Math.min(e.x, this.map.w - e.r)); e.y = Math.max(e.r, Math.min(e.y, this.map.h - e.r));
                     }
                 });
-
-                        }
-                    }
-                }
 
                 // Impact Detection
                 for (let i = this.bullets.length - 1; i >= 0; i--) {
