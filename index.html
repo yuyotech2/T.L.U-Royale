@@ -2766,7 +2766,10 @@
                 for (let i = this.bullets.length - 1; i >= 0; i--) {
                     const b = this.bullets[i];
                     if (b.exploded) { this.bullets.splice(i, 1); continue; }
-                    
+                    if (b.isGrenade || b.isFlash) {
+                        const drag = Math.exp(-3 * dt);
+                        b.vx *= drag; b.vy *= drag;
+                    }
                     b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
                     
                     // 3D vertical movement
@@ -2834,11 +2837,12 @@
                                     if (d < b.radius) {
                                         let s = (1 - d/b.radius);
                                         if (ent === this.player) {
+                                            const lookAng = userData.is3D ? this.cameraYaw : this.player.angle;
                                             const angToFlash = Math.atan2(b.y - this.player.y, b.x - this.player.x);
-                                            const lookDiff = Math.abs(this.normalizeAngle(angToFlash - this.cameraYaw));
+                                            const lookDiff = Math.abs(this.normalizeAngle(angToFlash - lookAng));
                                             if (lookDiff > 0.8) s *= 0.1;
-                                            this.flashIntensity = Math.max(this.flashIntensity, s * 4.5);
-                                        } else if (ent.isBot) ent.blindTimer = Math.max(ent.blindTimer, s * 5.0);
+                                            this.flashIntensity = Math.max(this.flashIntensity || 0, s * 4.5);
+                                        } else if (ent.isBot) ent.blindTimer = Math.max(ent.blindTimer || 0, s * 5.0);
                                     }
                                 }
                             });
@@ -3024,12 +3028,19 @@
 
                 if (this.flashIntensity > 0) {
                     this.flashIntensity -= 0.5 * (1/60); // 7s solid + 2s fade total at 4.5
-                    if (this.flashEl) {
-                        this.flashEl.style.display = 'block';
-                        this.flashEl.style.opacity = Math.min(1, this.flashIntensity);
+                    
+                    let flashDiv = document.getElementById('flash-overlay');
+                    if (!flashDiv) {
+                        flashDiv = document.createElement('div');
+                        flashDiv.id = 'flash-overlay';
+                        flashDiv.style.cssText = 'position:fixed; inset:0; background:#fff; pointer-events:none; z-index:99999;';
+                        document.body.appendChild(flashDiv);
                     }
-                } else if (this.flashEl) {
-                    this.flashEl.style.display = 'none';
+                    flashDiv.style.display = 'block';
+                    flashDiv.style.opacity = Math.min(1, this.flashIntensity);
+                } else {
+                    const flashDiv = document.getElementById('flash-overlay');
+                    if (flashDiv) flashDiv.style.display = 'none';
                 }
             }
             drawHUD() {
